@@ -1,0 +1,15 @@
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.2.0
+chromadb>=0.5.0
+pypdf>=5.0.0
+pyyaml>=6.0
+rank_bm25>=0.2.0
+# torch>=2.0.0 # 如果用交叉编码器重排序（Phase 2 实验7），取消注释
+#sentence-transformers # 同上
+langchain-core
+langchain-text-splitters
+numpy>=1.24.0
+langchain-chroma
+langchain-huggingface>=0.1.0
+streamlit>=1.33
