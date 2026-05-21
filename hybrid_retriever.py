@@ -57,19 +57,27 @@ class SemanticWeightDecider:
         self.prototype_precise = np.mean(precise_embs, axis=0)
         self.prototype_semantic = np.mean(semantic_embs, axis=0)
 
-    def decide(self, query: str) -> tuple[float, float]:
+    def semantic_nudge(self, query: str) -> float:
+        """
+        计算语义倾向微调值（±0.12），叠加在正则基线上
+
+        原理：bge-m3 原型空间虽近，但 sim 差值仍有细粒度信号。
+        不做绝对权重决策，只输出方向+强度。
+
+        Returns:
+            float in [-0.12, +0.12]
+            >0 → 偏精确，BM25 应增强
+            <0 → 偏语义，向量应增强
+        """
         q_vec = np.array(self.embeddings.embed_query(query))
         sim_precise = self._cosine(q_vec, self.prototype_precise)
         sim_semantic = self._cosine(q_vec, self.prototype_semantic)
 
-        # 用 softmax 式归一化替代硬分界，所有查询都能享受渐进权重
-        total = sim_precise + sim_semantic + 1e-8
-        precise_ratio = sim_precise / total
-
-        # 映射到合理区间：[0.3, 0.7] 范围内平滑变化
-        bm25_weight = 0.3 + 0.4 * precise_ratio   # 越趋近 precise 原型，BM25 权重越高
-        vector_weight = 1.0 - bm25_weight
-        return vector_weight, bm25_weight
+        # sim 差值归一化到 [-1, 1]，缩放到 [-0.12, 0.12]
+        diff = sim_precise - sim_semantic
+        max_diff = max(abs(sim_precise), abs(sim_semantic), 1e-8)
+        normalized = diff / max_diff
+        return float(normalized * 0.12)
 
     @staticmethod
     def _cosine(a: np.ndarray, b: np.ndarray) -> float:
@@ -174,11 +182,20 @@ class HybridRetriever:
         return vector_weight, bm25_weight
 
     def _get_weights(self, query: str):
-        """获取动态权重（语义优先，正则降级）"""
+        """
+        获取动态权重：正则信号（主） + 语义微调（辅）
+
+        正则信号负责捕捉：公式符号、缩写词、数字、专有名词 → 粗粒度区分
+        语义微调负责捕捉：查询在 precise/semantic 原型空间的倾向 → ±0.12 细调
+        """
+        vec_w, bm25_w = self.compute_dynamic_weights(query)
+
         if self.weight_decider is not None:
-            return self.weight_decider.decide(query)
-        else:
-            return self.compute_dynamic_weights(query)
+            nudge = self.weight_decider.semantic_nudge(query)
+            bm25_w = max(0.20, min(0.80, bm25_w + nudge))
+            vec_w = 1.0 - bm25_w
+
+        return vec_w, bm25_w
 
     def get_retriever(self, query: str = None) -> BaseRetriever:
         """
