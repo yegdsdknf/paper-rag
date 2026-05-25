@@ -6,9 +6,11 @@
 from rag_pipeline import build_hybrid_retriever, route_question, ask_with_context
 from conversation import ConversationManager
 from utils.config_loader import load_config
+from utils.console import ensure_utf8_console
 
 config = load_config()
 
+ensure_utf8_console()
 
 def print_divider():
     print("\n" + "-" * 60)

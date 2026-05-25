@@ -9,6 +9,10 @@
 
 import sys
 
+from utils.console import ensure_utf8_console
+
+
+ensure_utf8_console()
 
 def main():
     if len(sys.argv) > 1:

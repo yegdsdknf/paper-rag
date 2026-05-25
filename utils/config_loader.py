@@ -1,7 +1,11 @@
 import yaml
 import os
 
+from utils.console import ensure_utf8_console
+
 _config_cache = None    # 模块级缓存
+
+ensure_utf8_console()
 
 def load_config(config_path: str = "./config.yaml") -> dict:
     """加载 YAML 配置文件（带缓存，同一进程只读一次）"""

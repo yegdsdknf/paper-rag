@@ -3,6 +3,11 @@ RAG 问答链模块
 功能：连接已构建的向量数据库，创建检索问答链
 支持多轮对话上下文 + 流式输出
 """
+try:
+    import torch
+except ImportError:
+    torch = None
+
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_ollama import ChatOllama
 from utils.config_loader import load_config
@@ -21,6 +26,12 @@ TOP_K_RESULTS = config['k']
 _llm_cache = None
 
 
+def _get_embedding_device() -> str:
+    """优先使用 GPU；如果不可用则回退到 CPU。"""
+    if torch is not None and torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
 def _get_llm():
     """获取 LLM 实例（模块级单例，避免重复创建连接）"""
     global _llm_cache
@@ -37,9 +48,10 @@ def _get_llm():
 
 def build_hybrid_retriever():
     """构建检索器：从 Chroma 加载向量库 → 包装为 retriever"""
+    device = _get_embedding_device()
     embeddings = HuggingFaceBgeEmbeddings(
         model_name=EMBEDDING_MODEL,
-        model_kwargs={"device": "cpu"},
+        model_kwargs={"device": device},
         encode_kwargs={"normalize_embeddings": True},
     )
     vector_store = Chroma(
@@ -53,7 +65,7 @@ def build_hybrid_retriever():
         default_bm25_weight=config["default_bm25_weight"],
         embedding_model=embeddings,
     )
-    print("🔀 混合检索器已就绪（向量 + BM25）")
+    print(f"🔀 混合检索器已就绪（向量 + BM25, device={device}）")
     return hybrid
 
 
@@ -61,7 +73,13 @@ def build_hybrid_retriever():
 
 def _format_docs(docs):
     """统一格式化检索到的文档片段"""
-    return "\n\n---\n\n".join(doc.page_content for doc in docs)
+    blocks = []
+    for i, doc in enumerate(docs, 1):
+        source = doc.metadata.get("source", "未知来源")
+        page = doc.metadata.get("page", "?")
+        header = f"[片段{i} | 来源={source} | 页码={page}]"
+        blocks.append(f"{header}\n{doc.page_content}")
+    return "\n\n---\n\n".join(blocks)
 
 
 def _deduplicate_docs(docs):
@@ -117,9 +135,11 @@ def _generate_answer(question: str, docs: list, history_text: str = "") -> str:
     if llm is None:
         return "❌ LLM 模型未连接，请检查 Ollama 服务"
 
-    full_prompt = history_text + prompt_txt.format(context=context, question=question)
+    instruction = "请严格按“结论 -> 证据 -> 限制”的顺序回答。"
+    full_prompt = history_text + instruction + "\n" + prompt_txt.format(context=context, question=question)
     response = llm.invoke(full_prompt)
-    return response.content if hasattr(response, "content") else str(response)
+    text = response.content if hasattr(response, "content") else str(response)
+    return text.strip()
 
 
 # ── 路由 ──────────────────────────────────────────────
@@ -245,7 +265,8 @@ def ask_stream(hybrid: HybridRetriever, conversation, question: str):
     history_text = conversation.format_history()
     context = _format_docs(docs)
     prompt_txt = load_prompt("rag_summary_prompt")
-    full_prompt = history_text + prompt_txt.format(context=context, question=question)
+    instruction = "请严格按“结论 -> 证据 -> 限制”的顺序回答。"
+    full_prompt = history_text + instruction + "\n" + prompt_txt.format(context=context, question=question)
 
     llm = _get_llm()
     if llm is None:

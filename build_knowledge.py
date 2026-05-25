@@ -2,6 +2,11 @@
 # 负责：读取 PDF → 文本切分 → 向量化 → 分批存入 Chroma
 import os
 
+try:
+    import torch
+except ImportError:
+    torch = None
+
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
@@ -20,6 +25,12 @@ BATCH_SIZE = 32
 
 # 从配置文件读取跳过页面（config.yaml 中未配置则为空字典）
 SKIP_PAGES = config.get("skip_pages", {})
+
+def _get_embedding_device() -> str:
+    """优先使用 GPU；如果不可用则回退到 CPU。"""
+    if torch is not None and torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
 
 
 def load_pdfs(file_paths: list[str]) -> list[Document]:
@@ -53,14 +64,15 @@ def split_documents(documents, chunk_size, chunk_overlap):
 
 
 def build_vector_store(chunks, embedding_model: str, persist_dir: str, batch_size: int = BATCH_SIZE):
+    device = _get_embedding_device()
     embeddings = HuggingFaceEmbeddings(
         model_name=embedding_model,
-        model_kwargs={"device": "cpu"},
+        model_kwargs={"device": device},
         encode_kwargs={"normalize_embeddings": True},
     )
     try:
         test_vec = embeddings.embed_query("test")
-        print(f"✅ Embedding 模型 {embedding_model} 就绪，维度 {len(test_vec)}")
+        print(f"✅ Embedding 模型 {embedding_model} 就绪，维度 {len(test_vec)}（device={device}）")
     except Exception as e:
         print(f"❌ Embedding 连接失败：{e}")
         return None
