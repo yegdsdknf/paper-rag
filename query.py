@@ -23,10 +23,20 @@ def main():
     # 初始化
     print("\n⏳ 正在初始化（约需 5-10 秒）...")
     retriever = build_hybrid_retriever()
+    model_map = {
+        "1": ("默认演示", config["llm_model"]),
+        "2": ("reasoning 对照", config.get("llm_model_reasoning", config["llm_model"])),
+    }
+    print("\n请选择模型：")
+    print(f"  1) 默认演示：{config['llm_model']}")
+    print(f"  2) reasoning 对照：{config.get('llm_model_reasoning', config['llm_model'])}")
+    choice = input("> ").strip() or "1"
+    _, selected_model = model_map.get(choice, model_map["1"])
     conv = ConversationManager(
-        llm_model=config["llm_model"],
+        llm_model=selected_model,
         temperature=config["temperature"],
     )
+    print(f"\n✅ 当前模型：{selected_model}")
 
     print("\n✅ 初始化完成！输入 q 退出，输入 s 查看提示, 输入 c 清空对话历史")
 
@@ -63,7 +73,13 @@ def main():
         # 执行问答
         print("\n🤔 思考中...")
         try:
-            answer, sources = ask_with_context(retriever, conv, question)
+            answer, sources = ask_with_context(
+                retriever,
+                conv,
+                question,
+                llm_model=selected_model,
+                temperature=config["temperature"],
+            )
             conv.add_turn(question, answer)
             # 打印回答
             print(f"\n📝 回答：\n{answer}")

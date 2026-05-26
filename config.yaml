@@ -17,7 +17,8 @@ separators:
 # ============ 模型配置 ============
 # embedding_model: nomic-embed-text # 嵌入模型（Phase 2 可换 bge-m3）
 embedding_model: BAAI/bge-m3
-llm_model: deepseek-r1:8b           # LLM 模型（先用小模型跑通，再换 7b）
+llm_model: qwen2.5:3b               # 默认演示模型（更适合 8GB 显存，主流程优先）
+llm_model_reasoning: deepseek-r1:7b  # reasoning 对照模型（需要时切换，用于对比实验）
 temperature: 0.1                  # 论文问答越低越好（0~1，越低越确定）
 
 # ============ 混合检索权重（Phase 2 启用）============

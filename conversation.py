@@ -4,6 +4,8 @@ from langchain_ollama import ChatOllama
 
 class ConversationManager:
     def __init__(self, llm_model: str, temperature: float):
+        self.llm_model = llm_model
+        self.temperature = temperature
         self.llm = ChatOllama(model=llm_model, temperature=temperature)
         self.history: list[dict] = []  # [{"role":"user","content":"..."}, ...]
 
@@ -13,6 +15,22 @@ class ConversationManager:
             print(f"✅ 对话管理器就绪（{llm_model}）")
         except Exception as e:
             print(f"⚠️  对话管理器 LLM 连接失败：{e}，改写追问功能可能不可用")
+            self.llm = None
+
+    def update_model(self, llm_model: str, temperature: float | None = None):
+        """切换用于追问改写的模型；保持历史不变。"""
+        if temperature is None:
+            temperature = self.temperature
+        if self.llm_model == llm_model and self.temperature == temperature:
+            return
+        self.llm_model = llm_model
+        self.temperature = temperature
+        self.llm = ChatOllama(model=llm_model, temperature=temperature)
+        try:
+            self.llm.invoke("ping")
+            print(f"✅ 对话管理器模型已切换为（{llm_model}）")
+        except Exception as e:
+            print(f"⚠️  对话管理器模型切换失败：{e}，改写追问功能可能不可用")
             self.llm = None
 
     def add_turn(self, question: str, answer: str):

@@ -46,7 +46,14 @@ def _init():
 with st.sidebar:
     st.title("📚 论文知识库")
     _, cfg, _, _ = _init()
-    st.caption(f"📌 {cfg['llm_model']}  |  🧩 {cfg['embedding_model']}  |  k={cfg['k']}")
+    model_options = {
+        "默认演示": cfg["llm_model"],
+        "reasoning 对照": cfg.get("llm_model_reasoning", cfg["llm_model"]),
+    }
+    selected_mode = st.selectbox("LLM 模式", list(model_options.keys()), index=0)
+    selected_model = model_options[selected_mode]
+    st.session_state.selected_llm_model = selected_model
+    st.caption(f"📌 {selected_mode} · {selected_model}  |  🧩 {cfg['embedding_model']}  |  k={cfg['k']}")
 
     st.divider()
     st.subheader("📤 上传论文")
@@ -117,6 +124,8 @@ for msg in st.session_state.messages:
 # ── 输入 + 流式回答 ──
 if q := st.chat_input("💬 输入问题..."):
     conv = st.session_state.conversation
+    llm_model = st.session_state.get("selected_llm_model", cfg["llm_model"])
+    conv.update_model(llm_model, cfg["temperature"])
 
     st.session_state.messages.append({"role": "user", "content": q})
     with st.chat_message("user"):
@@ -128,7 +137,7 @@ if q := st.chat_input("💬 输入问题..."):
             answer = ""
 
             placeholder = st.empty()
-            for event in ask_stream(hybrid, conv, q):
+            for event in ask_stream(hybrid, conv, q, llm_model=llm_model, temperature=cfg["temperature"]):
                 if event["type"] == "rewrite":
                     st.caption(f"🔄 改写追问：_{event['data']}_")
                 elif event["type"] == "route":

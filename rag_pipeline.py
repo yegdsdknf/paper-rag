@@ -23,7 +23,8 @@ TEMPERATURE = config['temperature']
 TOP_K_RESULTS = config['k']
 
 # ── LLM 单例缓存 ──────────────────────────────────────
-_llm_cache = None
+# 按 (model, temperature) 缓存多个 ChatOllama 实例，方便在默认/对照模型之间切换。
+_llm_cache = {}
 
 
 def _get_embedding_device() -> str:
@@ -32,18 +33,20 @@ def _get_embedding_device() -> str:
         return "cuda"
     return "cpu"
 
-def _get_llm():
-    """获取 LLM 实例（模块级单例，避免重复创建连接）"""
+def _get_llm(llm_model: str = LLM_MODEL, temperature: float = TEMPERATURE):
+    """获取 LLM 实例（按模型名缓存，避免重复创建连接）"""
     global _llm_cache
-    if _llm_cache is None:
-        _llm_cache = ChatOllama(model=LLM_MODEL, temperature=TEMPERATURE)
+    cache_key = (llm_model, temperature)
+    if cache_key not in _llm_cache:
+        llm = ChatOllama(model=llm_model, temperature=temperature)
         try:
-            _llm_cache.invoke("ping")
-            print(f"✅ LLM 模型 {LLM_MODEL} 连接成功")
+            llm.invoke("ping")
+            print(f"✅ LLM 模型 {llm_model} 连接成功")
+            _llm_cache[cache_key] = llm
         except Exception as e:
             print(f"❌ LLM 连接失败：{e}")
-            _llm_cache = None
-    return _llm_cache
+            _llm_cache[cache_key] = None
+    return _llm_cache[cache_key]
 
 
 def build_hybrid_retriever():
@@ -101,12 +104,17 @@ def _retrieve(hybrid: HybridRetriever, query: str) -> list:
     return _deduplicate_docs(docs)
 
 
-def _retrieve_with_hyde(hybrid: HybridRetriever, question: str) -> list:
+def _retrieve_with_hyde(
+    hybrid: HybridRetriever,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+) -> list:
     """HyDE 纯检索，返回去重后的文档列表"""
     hyde_prompt_txt = load_prompt("hyde_prompt")
     hyde_prompt = hyde_prompt_txt.format(query=question)
 
-    llm = _get_llm()
+    llm = _get_llm(llm_model, temperature)
     if llm is None:
         print("⚠️  LLM 不可用，降级为混合检索")
         return _retrieve(hybrid, question)
@@ -126,12 +134,18 @@ def _retrieve_with_hyde(hybrid: HybridRetriever, question: str) -> list:
     return docs
 
 
-def _generate_answer(question: str, docs: list, history_text: str = "") -> str:
+def _generate_answer(
+    question: str,
+    docs: list,
+    history_text: str = "",
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+) -> str:
     """用检索到的文档 + 可选多轮历史生成最终答案（非流式）"""
     context = _format_docs(docs)
     prompt_txt = load_prompt("rag_summary_prompt")
 
-    llm = _get_llm()
+    llm = _get_llm(llm_model, temperature)
     if llm is None:
         return "❌ LLM 模型未连接，请检查 Ollama 服务"
 
@@ -165,7 +179,12 @@ def is_overview_question(question: str) -> bool:
     return any(sig in q_lower for sig in overview_signals)
 
 
-def _route_retrieve(hybrid: HybridRetriever, question: str) -> tuple[list, str]:
+def _route_retrieve(
+    hybrid: HybridRetriever,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+) -> tuple[list, str]:
     """
     统一路由检索入口（所有调用方使用同一逻辑）
 
@@ -177,34 +196,50 @@ def _route_retrieve(hybrid: HybridRetriever, question: str) -> tuple[list, str]:
         return _retrieve(hybrid, question), "mixed"
     else:
         print("🧠 使用 HyDE 增强检索")
-        return _retrieve_with_hyde(hybrid, question), "hyde"
+        return _retrieve_with_hyde(hybrid, question, llm_model, temperature), "hyde"
 
 
-def route_question(hybrid: HybridRetriever, question: str):
+def route_question(
+    hybrid: HybridRetriever,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+):
     """
     智能路由（单轮）：
     - 概述型 / 对比型 → 混合检索
     - 其他 → HyDE 增强检索
     """
-    docs, _ = _route_retrieve(hybrid, question)
+    docs, _ = _route_retrieve(hybrid, question, llm_model, temperature)
     if not docs:
         return "❌ 未找到相关内容", []
-    answer = _generate_answer(question, docs)
+    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature)
     return answer, docs
 
 
-def ask_with_hyde(hybrid: HybridRetriever, question: str):
+def ask_with_hyde(
+    hybrid: HybridRetriever,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+):
     """带 HyDE 增强的问答，返回答案和检索到的源文档"""
-    docs = _retrieve_with_hyde(hybrid, question)
+    docs = _retrieve_with_hyde(hybrid, question, llm_model, temperature)
     if not docs:
         return "❌ HyDE 检索未找到相关内容", []
-    answer = _generate_answer(question, docs)
+    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature)
     return answer, docs
 
 
 # ── 多轮对话 ──────────────────────────────────────────
 
-def ask_with_context(hybrid: HybridRetriever, conversation, question: str):
+def ask_with_context(
+    hybrid: HybridRetriever,
+    conversation,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+):
     """
     带多轮对话上下文的问答：
     1. 用历史改写追问 → 独立可检索的问题
@@ -215,19 +250,31 @@ def ask_with_context(hybrid: HybridRetriever, conversation, question: str):
     if standalone_q != question:
         print(f'🔄 改写追问: "{standalone_q}"')
 
-    docs, _ = _route_retrieve(hybrid, standalone_q)
+    docs, _ = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
 
     if not docs:
         return "❌ 未找到相关内容", []
 
     history_text = conversation.format_history()
-    answer = _generate_answer(question, docs, history_text)
+    answer = _generate_answer(
+        question,
+        docs,
+        history_text,
+        llm_model=llm_model,
+        temperature=temperature,
+    )
     return answer, docs
 
 
 # ── 流式生成（Streamlit Web 调用入口）─────────────────
 
-def ask_stream(hybrid: HybridRetriever, conversation, question: str):
+def ask_stream(
+    hybrid: HybridRetriever,
+    conversation,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+):
     """
     一次调用完成全链路：改写追问 → 路由检索 → 流式生成 → 返回来源
 
@@ -253,7 +300,7 @@ def ask_stream(hybrid: HybridRetriever, conversation, question: str):
         standalone_q = question
 
     # Step 2: 路由检索（统一入口）
-    docs, strategy = _route_retrieve(hybrid, standalone_q)
+    docs, strategy = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
     yield {"type": "route", "data": strategy}
     yield {"type": "docs", "data": docs}
 
@@ -268,7 +315,7 @@ def ask_stream(hybrid: HybridRetriever, conversation, question: str):
     instruction = "请严格按“结论 -> 证据 -> 限制”的顺序回答。"
     full_prompt = history_text + instruction + "\n" + prompt_txt.format(context=context, question=question)
 
-    llm = _get_llm()
+    llm = _get_llm(llm_model, temperature)
     if llm is None:
         yield {"type": "token", "data": "❌ LLM 模型未连接"}
         return
