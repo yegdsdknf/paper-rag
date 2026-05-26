@@ -8,9 +8,13 @@ HyDE 检索器：先让 LLM 生成假设性文档，再用它去检索
 """
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_ollama import ChatOllama
+from utils.ollama_client import create_chat_ollama
 
+from utils.config_loader import load_config
 from utils.prompt_loader import load_prompt
+
+config = load_config()
+DEFAULT_HYDE_MODEL = config.get("llm_model_reasoning", "deepseek-r1:7b")
 
 
 class HydeRetriever:
@@ -22,9 +26,9 @@ class HydeRetriever:
         2. 用假设性回答代替原始问题，去向量库检索
         3. 返回检索结果
     """
-    def __init__(self, base_retriever, llm_model: str = "deepseek-r1:8b", temperature: float = 0.1):
+    def __init__(self, base_retriever, llm_model: str = DEFAULT_HYDE_MODEL, temperature: float = 0.1):
         self.base_retriever = base_retriever
-        self.llm = ChatOllama(model=llm_model, temperature=temperature)
+        self.llm = create_chat_ollama(model=llm_model, temperature=temperature)
         # 从文件加载 HyDE prompt 模板
         hyde_prompt_text = load_prompt("hyde_prompt")
         self.hyde_prompt = PromptTemplate(

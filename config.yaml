@@ -20,6 +20,8 @@ embedding_model: BAAI/bge-m3
 llm_model: qwen2.5:3b               # 默认演示模型（更适合 8GB 显存，主流程优先）
 llm_model_reasoning: deepseek-r1:7b  # reasoning 对照模型（需要时切换，用于对比实验）
 temperature: 0.1                  # 论文问答越低越好（0~1，越低越确定）
+llm_num_ctx: 4096                 # 推荐上下文窗口：8GB 卡上更稳，能显著降低截断风险
+llm_num_predict: 1024             # 推荐输出上限：避免长答案被提前截断
 
 # ============ 混合检索权重（Phase 2 启用）============
 # 向量权重高 = 重语义 · BM25 权重高 = 重关键词精准匹配

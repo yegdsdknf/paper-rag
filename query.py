@@ -35,6 +35,8 @@ def main():
     conv = ConversationManager(
         llm_model=selected_model,
         temperature=config["temperature"],
+        num_ctx=config.get("llm_num_ctx"),
+        num_predict=config.get("llm_num_predict"),
     )
     print(f"\n✅ 当前模型：{selected_model}")
 

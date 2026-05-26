@@ -93,7 +93,12 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if not st.session_state.get("conversation"):
     _, cfg, _, CM = _init()
-    st.session_state.conversation = CM(cfg["llm_model"], cfg["temperature"])
+    st.session_state.conversation = CM(
+        cfg["llm_model"],
+        cfg["temperature"],
+        cfg.get("llm_num_ctx"),
+        cfg.get("llm_num_predict"),
+    )
 
 # ═══════════════════════════════════════════════════════
 # 主界面

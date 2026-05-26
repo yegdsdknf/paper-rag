@@ -1,12 +1,25 @@
 """多轮对话管理器：存储历史 + 改写追问"""
-from langchain_ollama import ChatOllama
+from utils.ollama_client import create_chat_ollama
 
 
 class ConversationManager:
-    def __init__(self, llm_model: str, temperature: float):
+    def __init__(
+        self,
+        llm_model: str,
+        temperature: float,
+        num_ctx: int | None = None,
+        num_predict: int | None = None,
+    ):
         self.llm_model = llm_model
         self.temperature = temperature
-        self.llm = ChatOllama(model=llm_model, temperature=temperature)
+        self.num_ctx = num_ctx
+        self.num_predict = num_predict
+        self.llm = create_chat_ollama(
+            model=llm_model,
+            temperature=temperature,
+            num_ctx=num_ctx,
+            num_predict=num_predict,
+        )
         self.history: list[dict] = []  # [{"role":"user","content":"..."}, ...]
 
         # 启动时验证 LLM 连通性
@@ -25,7 +38,12 @@ class ConversationManager:
             return
         self.llm_model = llm_model
         self.temperature = temperature
-        self.llm = ChatOllama(model=llm_model, temperature=temperature)
+        self.llm = create_chat_ollama(
+            model=llm_model,
+            temperature=temperature,
+            num_ctx=self.num_ctx,
+            num_predict=self.num_predict,
+        )
         try:
             self.llm.invoke("ping")
             print(f"✅ 对话管理器模型已切换为（{llm_model}）")

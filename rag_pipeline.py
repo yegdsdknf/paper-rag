@@ -9,8 +9,8 @@ except ImportError:
     torch = None
 
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-from langchain_ollama import ChatOllama
 from utils.config_loader import load_config
+from utils.ollama_client import create_chat_ollama
 from utils.prompt_loader import load_prompt
 from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
@@ -20,6 +20,8 @@ CHROMA_DB_DIR = config['persist_directory']
 EMBEDDING_MODEL = config['embedding_model']
 LLM_MODEL = config['llm_model']
 TEMPERATURE = config['temperature']
+LLM_NUM_CTX = config.get("llm_num_ctx", 4096)
+LLM_NUM_PREDICT = config.get("llm_num_predict", 1024)
 TOP_K_RESULTS = config['k']
 
 # ── LLM 单例缓存 ──────────────────────────────────────
@@ -33,12 +35,22 @@ def _get_embedding_device() -> str:
         return "cuda"
     return "cpu"
 
-def _get_llm(llm_model: str = LLM_MODEL, temperature: float = TEMPERATURE):
+def _get_llm(
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+    num_ctx: int = LLM_NUM_CTX,
+    num_predict: int = LLM_NUM_PREDICT,
+):
     """获取 LLM 实例（按模型名缓存，避免重复创建连接）"""
     global _llm_cache
-    cache_key = (llm_model, temperature)
+    cache_key = (llm_model, temperature, num_ctx, num_predict)
     if cache_key not in _llm_cache:
-        llm = ChatOllama(model=llm_model, temperature=temperature)
+        llm = create_chat_ollama(
+            model=llm_model,
+            temperature=temperature,
+            num_ctx=num_ctx,
+            num_predict=num_predict,
+        )
         try:
             llm.invoke("ping")
             print(f"✅ LLM 模型 {llm_model} 连接成功")

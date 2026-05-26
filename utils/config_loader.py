@@ -36,6 +36,8 @@ def get_default_config() -> dict:
         "llm_model": "qwen2.5:3b",
         "llm_model_reasoning": "deepseek-r1:7b",
         "temperature": 0.1,
+        "llm_num_ctx": 4096,
+        "llm_num_predict": 1024,
         "default_vector_weight": 0.5,
         "default_bm25_weight": 0.5,
         "skip_pages": {},
