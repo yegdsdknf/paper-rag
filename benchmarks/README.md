@@ -6,7 +6,8 @@
 
 | 文件 | 说明 |
 |---|---|
-| `labels/manual_benchmark_v1.jsonl` | 第一版人工标注基准集，覆盖 22 条样本。 |
+| `benchmark_v1.jsonl` | 任务文档约定的基准集入口文件，覆盖 25 条样本。 |
+| `labels/manual_benchmark_v1.jsonl` | 第一版人工标注基准集源文件，覆盖 25 条样本。 |
 
 ## 字段说明
 
