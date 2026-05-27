@@ -67,7 +67,7 @@ def build_vector_store(chunks, embedding_model: str, persist_dir: str, batch_siz
     device = _get_embedding_device()
     embeddings = HuggingFaceEmbeddings(
         model_name=embedding_model,
-        model_kwargs={"device": device},
+        model_kwargs={"device": device, "local_files_only": True},
         encode_kwargs={"normalize_embeddings": True},
     )
     try:

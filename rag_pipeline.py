@@ -66,7 +66,7 @@ def build_hybrid_retriever():
     device = _get_embedding_device()
     embeddings = HuggingFaceBgeEmbeddings(
         model_name=EMBEDDING_MODEL,
-        model_kwargs={"device": device},
+        model_kwargs={"device": device, "local_files_only": True},
         encode_kwargs={"normalize_embeddings": True},
     )
     vector_store = Chroma(

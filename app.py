@@ -4,8 +4,9 @@
 """
 import os, sys, streamlit as st
 
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
+from utils.console import configure_runtime_env
+
+configure_runtime_env()
 
 st.set_page_config(page_title="论文知识库问答", page_icon="📚", layout="wide")
 
