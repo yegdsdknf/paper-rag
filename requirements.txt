@@ -7,7 +7,8 @@ pyyaml>=6.0
 rank_bm25>=0.2.0
 # torch 用于 GPU 加速的嵌入模型推理；请按你的 CUDA/驱动环境安装对应 PyTorch 版本
 torch>=2.2.0
-#sentence-transformers # 同上
+sentence-transformers # rerank 精排与本地 embedding 相关模型依赖
+modelscope # 用于在 Hugging Face 连接不稳定时下载国内镜像模型
 langchain-core
 langchain-text-splitters
 numpy>=1.24.0

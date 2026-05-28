@@ -1,6 +1,11 @@
 venv/
 chroma_db/
 data/
+models/
+eval/reports/
+benchmarks/*results*.jsonl
+benchmarks/*report*.md
+benchmarks/retrieval_*.jsonl
 __pycache__/
 *.pyc
 .env

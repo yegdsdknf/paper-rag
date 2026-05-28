@@ -8,12 +8,20 @@ try:
 except ImportError:
     torch = None
 
+import os
+
+# 基准评估默认只使用本地模型文件，避免 transformers 导入后启动联网元数据查询。
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
+
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from utils.config_loader import load_config
 from utils.ollama_client import create_chat_ollama
 from utils.prompt_loader import load_prompt
 from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
+from reranker import apply_rerank
 
 config = load_config()
 CHROMA_DB_DIR = config['persist_directory']
@@ -205,10 +213,20 @@ def _route_retrieve(
     """
     if is_comparison_question(question) or is_overview_question(question):
         print("🔀 使用标准混合检索")
-        return _retrieve(hybrid, question), "mixed"
+        docs = _retrieve(hybrid, question)
+        docs = apply_rerank(
+            question,
+            docs,
+            enabled=config.get("enable_rerank", False),
+            model_name=config.get("reranker_model", "BAAI/bge-reranker-v2-m3"),
+            top_k=config.get("rerank_top_k", TOP_K_RESULTS),
+            device=_get_embedding_device(),
+        )
+        return docs, "mixed"
     else:
         print("🧠 使用 HyDE 增强检索")
-        return _retrieve_with_hyde(hybrid, question, llm_model, temperature), "hyde"
+        docs = _retrieve_with_hyde(hybrid, question, llm_model, temperature)
+        return docs, "hyde"
 
 
 def route_question(
