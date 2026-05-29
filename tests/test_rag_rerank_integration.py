@@ -23,7 +23,10 @@ class RagRerankIntegrationTest(unittest.TestCase):
         def fake_apply(query, docs, **kwargs):
             return list(reversed(docs))
 
-        with patch.object(rag_pipeline, "apply_rerank", side_effect=fake_apply) as rerank:
+        with (
+            patch.dict(rag_pipeline.config, {"enable_query_expansion": False}),
+            patch.object(rag_pipeline, "apply_rerank", side_effect=fake_apply) as rerank,
+        ):
             docs, strategy = rag_pipeline._route_retrieve(FakeHybrid(), "BERT 和 ViT 有什么区别")
 
         self.assertEqual(strategy, "mixed")
@@ -32,6 +35,7 @@ class RagRerankIntegrationTest(unittest.TestCase):
 
     def test_hyde_route_does_not_apply_rerank_yet(self):
         with (
+            patch.dict(rag_pipeline.config, {"enable_query_expansion": False}),
             patch.object(rag_pipeline, "_retrieve_with_hyde", return_value=[Document(page_content="hyde")]),
             patch.object(rag_pipeline, "apply_rerank") as rerank,
         ):

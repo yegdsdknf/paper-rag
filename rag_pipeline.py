@@ -9,6 +9,7 @@ except ImportError:
     torch = None
 
 import os
+import re
 
 # 基准评估默认只使用本地模型文件，避免 transformers 导入后启动联网元数据查询。
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -16,11 +17,13 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
 
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from langchain_core.documents import Document
 from utils.config_loader import load_config
 from utils.ollama_client import create_chat_ollama
 from utils.prompt_loader import load_prompt
 from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
+from query_expansion import expand_query
 from reranker import apply_rerank
 
 config = load_config()
@@ -117,11 +120,142 @@ def _deduplicate_docs(docs):
     return unique
 
 
+def _normalize_source_signal(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def _filter_docs_to_mentioned_sources(question: str, docs: list) -> list:
+    """证据定位题优先保留题目中点名的论文，减少通用 Transformer 页干扰。"""
+    question_signal = _normalize_source_signal(question)
+    matched_sources = set()
+
+    for doc in docs:
+        source = os.path.basename(str(doc.metadata.get("source", "")))
+        stem = os.path.splitext(source)[0]
+        source_signal = _normalize_source_signal(stem)
+        if source_signal and source_signal in question_signal:
+            matched_sources.add(source_signal)
+
+    if not matched_sources:
+        return docs
+
+    return [
+        doc
+        for doc in docs
+        if _normalize_source_signal(os.path.splitext(os.path.basename(str(doc.metadata.get("source", ""))))[0])
+        in matched_sources
+    ]
+
+
+_SOURCE_ALIASES = [
+    ("bert.pdf", ["bert"]),
+    ("gpt3.pdf", ["gpt-3", "gpt3"]),
+    ("t5.pdf", ["t5"]),
+    ("vit.pdf", ["vit", "vision transformer"]),
+    ("deepseekr1.pdf", ["deepseek-r1", "deepseekr1", "deepseek"]),
+    ("attention is all you need.pdf", ["attention is all you need"]),
+]
+
+
+def _mentioned_source_files(question: str) -> list[str]:
+    q_lower = question.lower()
+    matches: list[tuple[int, str]] = []
+    for source, aliases in _SOURCE_ALIASES:
+        positions = [q_lower.find(alias) for alias in aliases if q_lower.find(alias) >= 0]
+        if positions:
+            matches.append((min(positions), source))
+
+    ordered = [source for _, source in sorted(matches, key=lambda item: item[0])]
+    commonality_signals = ["共同点", "相同", "共性", "similarity", "similarities", "common"]
+    if (
+        len(ordered) >= 2
+        and "attention is all you need.pdf" not in ordered
+        and any(signal in q_lower for signal in commonality_signals)
+    ):
+        ordered.append("attention is all you need.pdf")
+    return ordered
+
+
+def _load_anchor_docs_by_page(hybrid: HybridRetriever, source_files: list[str], pages: list[int]) -> list[Document]:
+    vector_store = getattr(hybrid, "vector_store", None)
+    if vector_store is None or not source_files:
+        return []
+
+    try:
+        stored = vector_store.get(include=["documents", "metadatas"])
+    except Exception as exc:
+        print(f"⚠️  Compare anchor 加载失败：{type(exc).__name__}: {exc}")
+        return []
+
+    wanted_sources = {_normalize_source_signal(source): source for source in source_files}
+    wanted_pages = set(pages)
+    selected: dict[tuple[str, int], Document] = {}
+    for content, metadata in zip(stored.get("documents", []), stored.get("metadatas", [])):
+        source = os.path.basename(str(metadata.get("source", "")))
+        source_key = _normalize_source_signal(source)
+        page = metadata.get("page")
+        if source_key not in wanted_sources or page not in wanted_pages:
+            continue
+        key = (wanted_sources[source_key], int(page))
+        if key not in selected:
+            selected[key] = Document(page_content=content, metadata=dict(metadata))
+
+    return [selected[key] for key in [(source, page) for source in source_files for page in pages] if key in selected]
+
+
+def _get_compare_anchor_docs(hybrid: HybridRetriever, question: str) -> list[Document]:
+    source_files = _mentioned_source_files(question)
+    if not source_files:
+        return []
+
+    front_pages = _load_anchor_docs_by_page(hybrid, source_files, [0])
+    explicit_sources = [source for source in source_files if source != "attention is all you need.pdf"]
+    early_pages = _load_anchor_docs_by_page(hybrid, explicit_sources, [1, 2, 3])
+    return _deduplicate_docs(front_pages + early_pages)
+
+
 def _retrieve(hybrid: HybridRetriever, query: str) -> list:
     """纯检索，不生成答案（已去重）"""
     retriever = hybrid.get_retriever(query)
     docs = retriever.invoke(query)
     return _deduplicate_docs(docs)
+
+
+def _retrieve_multi_query(
+    hybrid: HybridRetriever,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+) -> tuple[list, list[str]]:
+    """对原始 query 和改写 query 分别召回，合并去重后返回。"""
+    original_docs = _retrieve(hybrid, question)
+    if not config.get("enable_query_expansion", False):
+        return original_docs, []
+
+    n_variants = int(config.get("query_expansion_variants", 2))
+    expansion_model = config.get("query_expansion_model", llm_model)
+    llm = _get_llm(expansion_model, temperature)
+    try:
+        variants = expand_query(question, llm, n_variants=n_variants)
+    except Exception as exc:
+        print(f"⚠️  Query expansion 失败：{type(exc).__name__}: {exc}，仅使用原始 query")
+        return original_docs, []
+
+    if not variants:
+        return original_docs, []
+
+    print("🔎 Query variants:")
+    for index, variant in enumerate(variants, 1):
+        print(f"  {index}. {variant}")
+
+    merged_docs = list(original_docs)
+    for variant in variants:
+        merged_docs.extend(_retrieve(hybrid, variant))
+
+    merged_docs = _deduplicate_docs(merged_docs)
+    max_multiplier = int(config.get("query_expansion_max_multiplier", n_variants + 1))
+    max_docs = max(len(original_docs) * max_multiplier, len(original_docs))
+    return merged_docs[:max_docs], variants
 
 
 def _retrieve_with_hyde(
@@ -182,8 +316,8 @@ def is_comparison_question(question: str) -> bool:
     """检测是否对比型问题"""
     comparison_signals = [
         "vs", "versus", "difference", "differences",
-        "compare", "comparison", "between",
-        "不同", "比较", "相比", "之间", "对比", "区别", "差别",
+        "compare", "comparison", "between", "similarity", "similarities", "common",
+        "不同", "比较", "相比", "之间", "对比", "区别", "差别", "差异", "共同点", "相同", "共性",
     ]
     q_lower = question.lower()
     return any(sig in q_lower for sig in comparison_signals)
@@ -199,6 +333,16 @@ def is_overview_question(question: str) -> bool:
     return any(sig in q_lower for sig in overview_signals)
 
 
+def is_evidence_question(question: str) -> bool:
+    """检测证据定位类问题：优先精确检索页码，避免 HyDE 生成内容带偏。"""
+    evidence_signals = [
+        "证据", "依据", "在哪一页", "哪一页", "页码", "原文",
+        "evidence", "which page", "page number", "where does", "quote",
+    ]
+    q_lower = question.lower()
+    return any(sig in q_lower for sig in evidence_signals)
+
+
 def _route_retrieve(
     hybrid: HybridRetriever,
     question: str,
@@ -211,18 +355,30 @@ def _route_retrieve(
     Returns:
         (docs, strategy) — 去重后的文档列表 + 使用的策略名 ("mixed" / "hyde")
     """
-    if is_comparison_question(question) or is_overview_question(question):
+    is_comparison = is_comparison_question(question)
+    if is_comparison or is_overview_question(question) or is_evidence_question(question):
         print("🔀 使用标准混合检索")
-        docs = _retrieve(hybrid, question)
+        docs, variants = _retrieve_multi_query(hybrid, question, llm_model, temperature)
+        if is_evidence_question(question):
+            docs = _filter_docs_to_mentioned_sources(question, docs)
+            source_files = _mentioned_source_files(question)
+            anchors = _load_anchor_docs_by_page(hybrid, source_files, [0])
+            docs = _deduplicate_docs(anchors + docs)[:config.get("rerank_top_k", TOP_K_RESULTS)]
+            strategy = "mixed_multi_query" if variants else "mixed"
+            return docs, strategy
+        rerank_top_k = config.get("rerank_top_k", TOP_K_RESULTS)
         docs = apply_rerank(
             question,
             docs,
             enabled=config.get("enable_rerank", False),
             model_name=config.get("reranker_model", "BAAI/bge-reranker-v2-m3"),
-            top_k=config.get("rerank_top_k", TOP_K_RESULTS),
+            top_k=rerank_top_k,
             device=_get_embedding_device(),
         )
-        return docs, "mixed"
+        if is_comparison:
+            docs = _deduplicate_docs(_get_compare_anchor_docs(hybrid, question) + docs)[:rerank_top_k]
+        strategy = "mixed_multi_query" if variants else "mixed"
+        return docs, strategy
     else:
         print("🧠 使用 HyDE 增强检索")
         docs = _retrieve_with_hyde(hybrid, question, llm_model, temperature)

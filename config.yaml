@@ -34,6 +34,13 @@ enable_rerank: true
 reranker_model: ./models/bge-reranker-v2-m3-ms
 rerank_top_k: 6
 
+# ============ Query Expansion / Multi-Query（任务5）============
+# 仅作用于标准 mixed 检索路径；原始 query 保留，额外生成 query 变体后统一 rerank。
+enable_query_expansion: true
+query_expansion_model: qwen2.5:3b
+query_expansion_variants: 2
+query_expansion_max_multiplier: 3
+
 # ============ 语义切割阈值（Phase 2 智能分块用）============
 semantic_similarity_threshold: 0.7
 
