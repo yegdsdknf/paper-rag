@@ -1,11 +1,14 @@
 # ============ 向量数据库配置 ============
-collection_name: paper_collection
+collection_name: langchain
 persist_directory: ./chroma_db
 k: 6                           # 检索返回 TOP-K，论文问答建议 3~5
 
 # ============ 文本分块配置 ============
 chunk_size: 500                   # 每个文本块最大字符数
 chunk_overlap: 100                # 相邻块重叠字符数（防切断句子）
+chunk_strategy: recursive_character
+chunk_schema_version: v1
+index_manifest_filename: index_manifest.json
 separators:
   - "\n\n"
   - "\n"
@@ -40,6 +43,21 @@ enable_query_expansion: true
 query_expansion_model: qwen2.5:3b
 query_expansion_variants: 2
 query_expansion_max_multiplier: 3
+
+# ============ Context Compression（任务6）============
+# 只压缩送入生成 prompt 的上下文，不改变检索结果和前端来源展示。
+enable_context_compression: true
+context_compression_max_sentences: 3
+
+# ============ Parent Document Retrieval（任务7）============
+# 召回 child chunk 后，生成阶段回溯同来源同页 chunks 作为 parent context。
+enable_parent_retrieval: true
+parent_max_chars_per_page: 2500
+
+# ============ 结构化查询日志（任务9）============
+# 记录每次问答的 route、来源、上下文长度和分阶段耗时，便于后续失败分析。
+enable_query_logging: true
+query_log_path: logs/query_runs.jsonl
 
 # ============ 语义切割阈值（Phase 2 智能分块用）============
 semantic_similarity_threshold: 0.7

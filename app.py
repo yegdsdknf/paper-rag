@@ -4,6 +4,8 @@
 """
 import os, sys, streamlit as st
 
+from app_services import build_feedback_payload, save_feedback_from_payload, save_uploaded_pdfs
+from app_state import clear_conversation_state
 from utils.console import configure_runtime_env
 
 configure_runtime_env()
@@ -55,6 +57,17 @@ with st.sidebar:
     selected_model = model_options[selected_mode]
     st.session_state.selected_llm_model = selected_model
     st.caption(f"📌 {selected_mode} · {selected_model}  |  🧩 {cfg['embedding_model']}  |  k={cfg['k']}")
+    try:
+        from paper_rag.config import RagSettings
+        from paper_rag.indexing import load_index_manifest, resolve_index_version
+
+        index_settings = RagSettings.from_mapping(cfg)
+        manifest = load_index_manifest(index_settings)
+        version = resolve_index_version(index_settings)
+        detail = f" · {manifest.get('chunk_count', 0)} chunks" if manifest else " · 未找到 manifest"
+        st.caption(f"🗂️ index={version}{detail}")
+    except Exception:
+        st.caption("🗂️ index=unknown")
 
     st.divider()
     st.subheader("📤 上传论文")
@@ -63,10 +76,7 @@ with st.sidebar:
     if up and st.button("🚀 一键入库", type="primary", use_container_width=True):
         _, _, _, _, bk = _imports()
         papers_dir = os.path.join(PROJECT_ROOT, "papers")
-        os.makedirs(papers_dir, exist_ok=True)
-        for f in up:
-            with open(os.path.join(papers_dir, f.name), "wb") as fh:
-                fh.write(f.getbuffer())
+        save_uploaded_pdfs(up, papers_dir)
         bk.main()
         # 递增版本 → 下次 _init() 自动重建检索器（无需清空其他缓存）
         st.session_state.db_version = st.session_state.get("db_version", 0) + 1
@@ -75,8 +85,7 @@ with st.sidebar:
 
     st.divider()
     if st.button("🧹 清空对话", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.conversation = None
+        clear_conversation_state(st.session_state)
         st.rerun()
 
     st.divider()
@@ -92,6 +101,8 @@ if "db_version" not in st.session_state:
     st.session_state.db_version = 0
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "last_feedback_payload" not in st.session_state:
+    st.session_state.last_feedback_payload = None
 if not st.session_state.get("conversation"):
     _, cfg, _, CM = _init()
     st.session_state.conversation = CM(
@@ -141,13 +152,15 @@ if q := st.chat_input("💬 输入问题..."):
         try:
             docs = []
             answer = ""
+            route = ""
 
             placeholder = st.empty()
             for event in ask_stream(hybrid, conv, q, llm_model=llm_model, temperature=cfg["temperature"]):
                 if event["type"] == "rewrite":
                     st.caption(f"🔄 改写追问：_{event['data']}_")
                 elif event["type"] == "route":
-                    label = "混合检索" if event["data"] == "mixed" else "HyDE 增强"
+                    route = event["data"]
+                    label = "混合检索" if event["data"].startswith("mixed") else "HyDE 增强"
                     st.caption(f"🔀 检索策略：**{label}**")
                 elif event["type"] == "docs":
                     docs = event["data"]
@@ -171,5 +184,21 @@ if q := st.chat_input("💬 输入问题..."):
             st.session_state.messages.append({
                 "role": "assistant", "content": answer, "sources": docs,
             })
+            st.session_state.last_feedback_payload = build_feedback_payload(q, answer, docs, route, llm_model)
         except Exception as e:
             st.error(str(e))
+
+payload = st.session_state.get("last_feedback_payload")
+if payload:
+    with st.expander("📝 记录失败样本 / 反馈"):
+        note = st.text_area(
+            "备注",
+            placeholder="例如：答非所问、页码不对、证据不足、回答自相矛盾……",
+            key="feedback_note",
+        )
+        if st.button("保存到反馈集", use_container_width=True):
+            try:
+                path = save_feedback_from_payload(payload, note)
+                st.success(f"已保存：{path}")
+            except ValueError as e:
+                st.warning(str(e))

@@ -9,7 +9,6 @@ except ImportError:
     torch = None
 
 import os
-import re
 
 # 基准评估默认只使用本地模型文件，避免 transformers 导入后启动联网元数据查询。
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -23,17 +22,39 @@ from utils.ollama_client import create_chat_ollama
 from utils.prompt_loader import load_prompt
 from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
+from paper_rag.config import RagSettings
 from query_expansion import expand_query
 from reranker import apply_rerank
+from context_builder import build_context_stats, prepare_docs_for_context
+from generation_service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
+from paper_rag.observability.service import write_query_log
+from paper_rag.observability.trace import TraceTimer
+from retrieval_router import (
+    RetrievalRouter,
+    deduplicate_docs,
+    get_compare_anchor_docs,
+    is_comparison_question,
+    is_evidence_question,
+    is_overview_question,
+    load_anchor_docs_by_page,
+    mentioned_source_files,
+)
 
 config = load_config()
-CHROMA_DB_DIR = config['persist_directory']
-EMBEDDING_MODEL = config['embedding_model']
-LLM_MODEL = config['llm_model']
-TEMPERATURE = config['temperature']
-LLM_NUM_CTX = config.get("llm_num_ctx", 4096)
-LLM_NUM_PREDICT = config.get("llm_num_predict", 1024)
-TOP_K_RESULTS = config['k']
+settings = RagSettings.from_mapping(config)
+CHROMA_DB_DIR = settings.persist_directory
+EMBEDDING_MODEL = settings.embedding_model
+LLM_MODEL = settings.llm_model
+TEMPERATURE = settings.temperature
+LLM_NUM_CTX = settings.llm_num_ctx
+LLM_NUM_PREDICT = settings.llm_num_predict
+TOP_K_RESULTS = settings.k
+
+
+def _get_settings() -> RagSettings:
+    """从当前 config 构建 settings，保留测试和运行期 patch config 的兼容语义。"""
+    return RagSettings.from_mapping(config)
+
 
 # ── LLM 单例缓存 ──────────────────────────────────────
 # 按 (model, temperature) 缓存多个 ChatOllama 实例，方便在默认/对照模型之间切换。
@@ -74,21 +95,23 @@ def _get_llm(
 
 def build_hybrid_retriever():
     """构建检索器：从 Chroma 加载向量库 → 包装为 retriever"""
+    current_settings = _get_settings()
     device = _get_embedding_device()
     embeddings = HuggingFaceBgeEmbeddings(
-        model_name=EMBEDDING_MODEL,
+        model_name=current_settings.embedding_model,
         model_kwargs={"device": device, "local_files_only": True},
         encode_kwargs={"normalize_embeddings": True},
     )
     vector_store = Chroma(
-        persist_directory=CHROMA_DB_DIR,
+        persist_directory=current_settings.persist_directory,
         embedding_function=embeddings,
+        collection_name=current_settings.collection_name,
     )
     hybrid = HybridRetriever(
         vector_store=vector_store,
-        top_k=config["k"],
-        default_vector_weight=config["default_vector_weight"],
-        default_bm25_weight=config["default_bm25_weight"],
+        top_k=current_settings.k,
+        default_vector_weight=current_settings.default_vector_weight,
+        default_bm25_weight=current_settings.default_bm25_weight,
         embedding_model=embeddings,
     )
     print(f"🔀 混合检索器已就绪（向量 + BM25, device={device}）")
@@ -108,110 +131,44 @@ def _format_docs(docs):
     return "\n\n---\n\n".join(blocks)
 
 
+def _write_query_log(
+    question: str,
+    standalone_question: str,
+    route: str,
+    llm_model: str,
+    docs: list,
+    elapsed: dict[str, float],
+    context_stats: dict | None = None,
+    error: str | None = None,
+) -> None:
+    write_query_log(
+        settings=_get_settings(),
+        question=question,
+        standalone_question=standalone_question,
+        route=route,
+        llm_model=llm_model,
+        docs=docs,
+        elapsed=elapsed,
+        embedding_device_fn=_get_embedding_device,
+        context_stats=context_stats,
+        error=error,
+    )
+
+
 def _deduplicate_docs(docs):
-    """同一来源同一页只保留一个 chunk，减少重复 token 消耗"""
-    seen = set()
-    unique = []
-    for doc in docs:
-        key = (doc.metadata.get("source", ""), doc.metadata.get("page", -1))
-        if key not in seen:
-            seen.add(key)
-            unique.append(doc)
-    return unique
-
-
-def _normalize_source_signal(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", text.lower())
-
-
-def _filter_docs_to_mentioned_sources(question: str, docs: list) -> list:
-    """证据定位题优先保留题目中点名的论文，减少通用 Transformer 页干扰。"""
-    question_signal = _normalize_source_signal(question)
-    matched_sources = set()
-
-    for doc in docs:
-        source = os.path.basename(str(doc.metadata.get("source", "")))
-        stem = os.path.splitext(source)[0]
-        source_signal = _normalize_source_signal(stem)
-        if source_signal and source_signal in question_signal:
-            matched_sources.add(source_signal)
-
-    if not matched_sources:
-        return docs
-
-    return [
-        doc
-        for doc in docs
-        if _normalize_source_signal(os.path.splitext(os.path.basename(str(doc.metadata.get("source", ""))))[0])
-        in matched_sources
-    ]
-
-
-_SOURCE_ALIASES = [
-    ("bert.pdf", ["bert"]),
-    ("gpt3.pdf", ["gpt-3", "gpt3"]),
-    ("t5.pdf", ["t5"]),
-    ("vit.pdf", ["vit", "vision transformer"]),
-    ("deepseekr1.pdf", ["deepseek-r1", "deepseekr1", "deepseek"]),
-    ("attention is all you need.pdf", ["attention is all you need"]),
-]
+    return deduplicate_docs(docs)
 
 
 def _mentioned_source_files(question: str) -> list[str]:
-    q_lower = question.lower()
-    matches: list[tuple[int, str]] = []
-    for source, aliases in _SOURCE_ALIASES:
-        positions = [q_lower.find(alias) for alias in aliases if q_lower.find(alias) >= 0]
-        if positions:
-            matches.append((min(positions), source))
-
-    ordered = [source for _, source in sorted(matches, key=lambda item: item[0])]
-    commonality_signals = ["共同点", "相同", "共性", "similarity", "similarities", "common"]
-    if (
-        len(ordered) >= 2
-        and "attention is all you need.pdf" not in ordered
-        and any(signal in q_lower for signal in commonality_signals)
-    ):
-        ordered.append("attention is all you need.pdf")
-    return ordered
+    return mentioned_source_files(question)
 
 
 def _load_anchor_docs_by_page(hybrid: HybridRetriever, source_files: list[str], pages: list[int]) -> list[Document]:
-    vector_store = getattr(hybrid, "vector_store", None)
-    if vector_store is None or not source_files:
-        return []
-
-    try:
-        stored = vector_store.get(include=["documents", "metadatas"])
-    except Exception as exc:
-        print(f"⚠️  Compare anchor 加载失败：{type(exc).__name__}: {exc}")
-        return []
-
-    wanted_sources = {_normalize_source_signal(source): source for source in source_files}
-    wanted_pages = set(pages)
-    selected: dict[tuple[str, int], Document] = {}
-    for content, metadata in zip(stored.get("documents", []), stored.get("metadatas", [])):
-        source = os.path.basename(str(metadata.get("source", "")))
-        source_key = _normalize_source_signal(source)
-        page = metadata.get("page")
-        if source_key not in wanted_sources or page not in wanted_pages:
-            continue
-        key = (wanted_sources[source_key], int(page))
-        if key not in selected:
-            selected[key] = Document(page_content=content, metadata=dict(metadata))
-
-    return [selected[key] for key in [(source, page) for source in source_files for page in pages] if key in selected]
+    return load_anchor_docs_by_page(hybrid, source_files, pages)
 
 
 def _get_compare_anchor_docs(hybrid: HybridRetriever, question: str) -> list[Document]:
-    source_files = _mentioned_source_files(question)
-    if not source_files:
-        return []
-
-    front_pages = _load_anchor_docs_by_page(hybrid, source_files, [0])
-    explicit_sources = [source for source in source_files if source != "attention is all you need.pdf"]
-    early_pages = _load_anchor_docs_by_page(hybrid, explicit_sources, [1, 2, 3])
-    return _deduplicate_docs(front_pages + early_pages)
+    return get_compare_anchor_docs(hybrid, question)
 
 
 def _retrieve(hybrid: HybridRetriever, query: str) -> list:
@@ -228,12 +185,13 @@ def _retrieve_multi_query(
     temperature: float = TEMPERATURE,
 ) -> tuple[list, list[str]]:
     """对原始 query 和改写 query 分别召回，合并去重后返回。"""
+    current_settings = _get_settings()
     original_docs = _retrieve(hybrid, question)
-    if not config.get("enable_query_expansion", False):
+    if not current_settings.enable_query_expansion:
         return original_docs, []
 
-    n_variants = int(config.get("query_expansion_variants", 2))
-    expansion_model = config.get("query_expansion_model", llm_model)
+    n_variants = current_settings.query_expansion_variants
+    expansion_model = current_settings.query_expansion_model or llm_model
     llm = _get_llm(expansion_model, temperature)
     try:
         variants = expand_query(question, llm, n_variants=n_variants)
@@ -253,7 +211,7 @@ def _retrieve_multi_query(
         merged_docs.extend(_retrieve(hybrid, variant))
 
     merged_docs = _deduplicate_docs(merged_docs)
-    max_multiplier = int(config.get("query_expansion_max_multiplier", n_variants + 1))
+    max_multiplier = current_settings.query_expansion_max_multiplier
     max_docs = max(len(original_docs) * max_multiplier, len(original_docs))
     return merged_docs[:max_docs], variants
 
@@ -294,54 +252,24 @@ def _generate_answer(
     history_text: str = "",
     llm_model: str = LLM_MODEL,
     temperature: float = TEMPERATURE,
+    hybrid: HybridRetriever | None = None,
+    prepared_context_docs: list | None = None,
 ) -> str:
     """用检索到的文档 + 可选多轮历史生成最终答案（非流式）"""
-    context = _format_docs(docs)
+    context_docs = prepared_context_docs or prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
+    context = _format_docs(context_docs)
     prompt_txt = load_prompt("rag_summary_prompt")
-
     llm = _get_llm(llm_model, temperature)
-    if llm is None:
-        return "❌ LLM 模型未连接，请检查 Ollama 服务"
-
-    instruction = "请严格按“结论 -> 证据 -> 限制”的顺序回答。"
-    full_prompt = history_text + instruction + "\n" + prompt_txt.format(context=context, question=question)
-    response = llm.invoke(full_prompt)
-    text = response.content if hasattr(response, "content") else str(response)
-    return text.strip()
+    return generate_answer(
+        llm,
+        prompt_template=prompt_txt,
+        context=context,
+        question=question,
+        history_text=history_text,
+    )
 
 
 # ── 路由 ──────────────────────────────────────────────
-
-def is_comparison_question(question: str) -> bool:
-    """检测是否对比型问题"""
-    comparison_signals = [
-        "vs", "versus", "difference", "differences",
-        "compare", "comparison", "between", "similarity", "similarities", "common",
-        "不同", "比较", "相比", "之间", "对比", "区别", "差别", "差异", "共同点", "相同", "共性",
-    ]
-    q_lower = question.lower()
-    return any(sig in q_lower for sig in comparison_signals)
-
-
-def is_overview_question(question: str) -> bool:
-    """检测是否基础介绍类问题 → 不适合 HyDE（HyDE 生成偏技术细节）"""
-    overview_signals = [
-        "是什么", "什么是", "介绍", "简介", "定义",
-        "what is", "definition", "overview", "introduction",
-    ]
-    q_lower = question.lower()
-    return any(sig in q_lower for sig in overview_signals)
-
-
-def is_evidence_question(question: str) -> bool:
-    """检测证据定位类问题：优先精确检索页码，避免 HyDE 生成内容带偏。"""
-    evidence_signals = [
-        "证据", "依据", "在哪一页", "哪一页", "页码", "原文",
-        "evidence", "which page", "page number", "where does", "quote",
-    ]
-    q_lower = question.lower()
-    return any(sig in q_lower for sig in evidence_signals)
-
 
 def _route_retrieve(
     hybrid: HybridRetriever,
@@ -349,40 +277,16 @@ def _route_retrieve(
     llm_model: str = LLM_MODEL,
     temperature: float = TEMPERATURE,
 ) -> tuple[list, str]:
-    """
-    统一路由检索入口（所有调用方使用同一逻辑）
-
-    Returns:
-        (docs, strategy) — 去重后的文档列表 + 使用的策略名 ("mixed" / "hyde")
-    """
-    is_comparison = is_comparison_question(question)
-    if is_comparison or is_overview_question(question) or is_evidence_question(question):
-        print("🔀 使用标准混合检索")
-        docs, variants = _retrieve_multi_query(hybrid, question, llm_model, temperature)
-        if is_evidence_question(question):
-            docs = _filter_docs_to_mentioned_sources(question, docs)
-            source_files = _mentioned_source_files(question)
-            anchors = _load_anchor_docs_by_page(hybrid, source_files, [0])
-            docs = _deduplicate_docs(anchors + docs)[:config.get("rerank_top_k", TOP_K_RESULTS)]
-            strategy = "mixed_multi_query" if variants else "mixed"
-            return docs, strategy
-        rerank_top_k = config.get("rerank_top_k", TOP_K_RESULTS)
-        docs = apply_rerank(
-            question,
-            docs,
-            enabled=config.get("enable_rerank", False),
-            model_name=config.get("reranker_model", "BAAI/bge-reranker-v2-m3"),
-            top_k=rerank_top_k,
-            device=_get_embedding_device(),
-        )
-        if is_comparison:
-            docs = _deduplicate_docs(_get_compare_anchor_docs(hybrid, question) + docs)[:rerank_top_k]
-        strategy = "mixed_multi_query" if variants else "mixed"
-        return docs, strategy
-    else:
-        print("🧠 使用 HyDE 增强检索")
-        docs = _retrieve_with_hyde(hybrid, question, llm_model, temperature)
-        return docs, "hyde"
+    """统一路由检索入口（兼容旧调用方，内部委托 retrieval_router）。"""
+    router = RetrievalRouter(
+        settings=_get_settings(),
+        llm_factory=_get_llm,
+        hyde_retrieve_fn=_retrieve_with_hyde,
+        multi_query_retrieve_fn=_retrieve_multi_query,
+        apply_rerank_fn=apply_rerank,
+        embedding_device_fn=_get_embedding_device,
+    )
+    return router.route(hybrid, question, llm_model, temperature)
 
 
 def route_question(
@@ -399,7 +303,7 @@ def route_question(
     docs, _ = _route_retrieve(hybrid, question, llm_model, temperature)
     if not docs:
         return "❌ 未找到相关内容", []
-    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature)
+    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature, hybrid=hybrid)
     return answer, docs
 
 
@@ -413,7 +317,7 @@ def ask_with_hyde(
     docs = _retrieve_with_hyde(hybrid, question, llm_model, temperature)
     if not docs:
         return "❌ HyDE 检索未找到相关内容", []
-    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature)
+    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature, hybrid=hybrid)
     return answer, docs
 
 
@@ -432,22 +336,49 @@ def ask_with_context(
     2. 检索（对比/概述 → 混合 / 其他 → HyDE）
     3. 用原始问题 + 检索 + 历史生成连贯回答
     """
+    timer = TraceTimer()
+    rewrite_start = timer.start_stage()
     standalone_q = conversation.reformulate(question)
+    rewrite_elapsed = timer.elapsed_since(rewrite_start)
     if standalone_q != question:
         print(f'🔄 改写追问: "{standalone_q}"')
 
-    docs, _ = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
+    retrieve_start = timer.start_stage()
+    docs, route = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
+    retrieve_elapsed = timer.elapsed_since(retrieve_start)
 
     if not docs:
+        _write_query_log(
+            question=question,
+            standalone_question=standalone_q,
+            route=route,
+            llm_model=llm_model,
+            docs=[],
+            elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
+        )
         return "❌ 未找到相关内容", []
 
     history_text = conversation.format_history()
+    generate_start = timer.start_stage()
+    context_docs = prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
     answer = _generate_answer(
         question,
         docs,
         history_text,
         llm_model=llm_model,
         temperature=temperature,
+        hybrid=hybrid,
+        prepared_context_docs=context_docs,
+    )
+    generate_elapsed = timer.elapsed_since(generate_start)
+    _write_query_log(
+        question=question,
+        standalone_question=standalone_q,
+        route=route,
+        llm_model=llm_model,
+        docs=docs,
+        elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, generate_elapsed),
+        context_stats=build_context_stats(docs, context_docs),
     )
     return answer, docs
 
@@ -477,39 +408,83 @@ def ask_stream(
             elif event["type"] == "token":
                 yield event["data"]  # 逐字输出到 Web
     """
+    timer = TraceTimer()
     # Step 1: 改写追问（多轮时）
+    rewrite_start = timer.start_stage()
     if conversation.history:
         standalone_q = conversation.reformulate(question)
         if standalone_q != question:
             yield {"type": "rewrite", "data": standalone_q}
     else:
         standalone_q = question
+    rewrite_elapsed = timer.elapsed_since(rewrite_start)
 
     # Step 2: 路由检索（统一入口）
+    retrieve_start = timer.start_stage()
     docs, strategy = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
+    retrieve_elapsed = timer.elapsed_since(retrieve_start)
     yield {"type": "route", "data": strategy}
     yield {"type": "docs", "data": docs}
 
     if not docs:
+        _write_query_log(
+            question=question,
+            standalone_question=standalone_q,
+            route=strategy,
+            llm_model=llm_model,
+            docs=[],
+            elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
+        )
         yield {"type": "token", "data": "❌ 未找到相关内容"}
         return
 
     # Step 3: 流式生成
+    generate_start = timer.start_stage()
     history_text = conversation.format_history()
-    context = _format_docs(docs)
+    context_docs = prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
+    context = _format_docs(context_docs)
     prompt_txt = load_prompt("rag_summary_prompt")
-    instruction = "请严格按“结论 -> 证据 -> 限制”的顺序回答。"
-    full_prompt = history_text + instruction + "\n" + prompt_txt.format(context=context, question=question)
-
     llm = _get_llm(llm_model, temperature)
     if llm is None:
-        yield {"type": "token", "data": "❌ LLM 模型未连接"}
+        _write_query_log(
+            question=question,
+            standalone_question=standalone_q,
+            route=strategy,
+            llm_model=llm_model,
+            docs=docs,
+            elapsed=timer.elapsed_map(
+                rewrite_elapsed,
+                retrieve_elapsed,
+                timer.elapsed_since(generate_start),
+            ),
+            context_stats=build_context_stats(docs, context_docs),
+            error="LLM 模型未连接",
+        )
+        yield {"type": "token", "data": LLM_STREAM_DISCONNECTED_MESSAGE}
         return
 
-    for chunk in llm.stream(full_prompt):
-        text = chunk.content if hasattr(chunk, "content") else str(chunk)
-        if text:
-            yield {"type": "token", "data": text}
+    for text in stream_answer_tokens(
+        llm,
+        prompt_template=prompt_txt,
+        context=context,
+        question=question,
+        history_text=history_text,
+    ):
+        yield {"type": "token", "data": text}
+
+    _write_query_log(
+        question=question,
+        standalone_question=standalone_q,
+        route=strategy,
+        llm_model=llm_model,
+        docs=docs,
+        elapsed=timer.elapsed_map(
+            rewrite_elapsed,
+            retrieve_elapsed,
+            timer.elapsed_since(generate_start),
+        ),
+        context_stats=build_context_stats(docs, context_docs),
+    )
 
 
 # ── 测试 ──────────────────────────────────────────────

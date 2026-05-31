@@ -14,17 +14,20 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from utils.dedup_manager import DedupManager, add_with_dedup
 from utils.config_loader import load_config
+from paper_rag.config import RagSettings
+from paper_rag.indexing import build_index_manifest, save_index_manifest
 
 config = load_config()
+settings = RagSettings.from_mapping(config)
 PDF_DIR = "./papers"
-CHROMA_DB_DIR = config["persist_directory"]
-CHUNK_SIZE = config["chunk_size"]
-CHUNK_OVERLAP = config["chunk_overlap"]
-EMBEDDING_MODEL = config["embedding_model"]
+CHROMA_DB_DIR = settings.persist_directory
+CHUNK_SIZE = settings.chunk_size
+CHUNK_OVERLAP = settings.chunk_overlap
+EMBEDDING_MODEL = settings.embedding_model
 BATCH_SIZE = 32
 
 # 从配置文件读取跳过页面（config.yaml 中未配置则为空字典）
-SKIP_PAGES = config.get("skip_pages", {})
+SKIP_PAGES = settings.skip_pages
 
 def _get_embedding_device() -> str:
     """优先使用 GPU；如果不可用则回退到 CPU。"""
@@ -55,7 +58,7 @@ def split_documents(documents, chunk_size, chunk_overlap):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        separators=config["separators"],
+        separators=settings.separators,
         length_function=len,
     )
     chunks = text_splitter.split_documents(documents)
@@ -63,7 +66,13 @@ def split_documents(documents, chunk_size, chunk_overlap):
     return chunks
 
 
-def build_vector_store(chunks, embedding_model: str, persist_dir: str, batch_size: int = BATCH_SIZE):
+def build_vector_store(
+    chunks,
+    embedding_model: str,
+    persist_dir: str,
+    batch_size: int = BATCH_SIZE,
+    collection_name: str = "langchain",
+):
     device = _get_embedding_device()
     embeddings = HuggingFaceEmbeddings(
         model_name=embedding_model,
@@ -90,6 +99,7 @@ def build_vector_store(chunks, embedding_model: str, persist_dir: str, batch_siz
                 documents=batch,
                 embedding=embeddings,
                 persist_directory=persist_dir,
+                collection_name=collection_name,
             )
         else:
             vector_store.add_documents(batch)
@@ -143,14 +153,25 @@ def main():
     chunks = split_documents(documents, CHUNK_SIZE, CHUNK_OVERLAP)
 
     print(f"\n🧠 分批向量化并入库（batch_size={BATCH_SIZE}）...")
-    vs = build_vector_store(chunks, EMBEDDING_MODEL, CHROMA_DB_DIR)
+    vs = build_vector_store(chunks, EMBEDDING_MODEL, CHROMA_DB_DIR, collection_name=settings.collection_name)
 
     if vs:
+        file_hashes = {fp: DedupManager.compute_md5(fp) for fp in new_papers}
+        manifest = build_index_manifest(
+            settings=settings,
+            source_files=new_papers,
+            file_hashes=file_hashes,
+            chunk_count=len(chunks),
+            embedding_device=_get_embedding_device(),
+        )
+        manifest_file = save_index_manifest(manifest, settings)
         print("\n✅ 论文入库完成！")
         print(f"   新增论文：{len(new_papers)} 篇")
         for fp in new_papers:
             print(f"     · {os.path.basename(fp)}")
         print(f"   入库块数：{len(chunks)}")
+        print(f"   索引版本：{manifest['index_version']}")
+        print(f"   Manifest：{manifest_file}")
     else:
         print("\n❌ 入库失败")
 

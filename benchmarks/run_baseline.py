@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -41,16 +40,6 @@ def load_samples(path: Path = BENCHMARK_PATH, limit: int | None = None) -> list[
             if limit is not None and len(samples) >= limit:
                 break
     return samples
-
-
-def _source_from_doc(doc: Any) -> dict[str, Any]:
-    metadata = getattr(doc, "metadata", {}) or {}
-    source = metadata.get("source", "unknown")
-    return {
-        "file": os.path.basename(str(source).replace("\\", "/")),
-        "page": metadata.get("page", -1),
-        "content_preview": getattr(doc, "page_content", "")[:200],
-    }
 
 
 def _make_result(
@@ -85,6 +74,7 @@ def _run_sample(
     rag_pipeline: Any,
     config: dict[str, Any],
     llm_model: str,
+    source_serializer: Any,
 ) -> dict[str, Any]:
     start = time.perf_counter()
     try:
@@ -107,7 +97,7 @@ def _run_sample(
         return _make_result(
             sample,
             predicted_answer=answer,
-            retrieved_sources=[_source_from_doc(doc) for doc in docs],
+            retrieved_sources=source_serializer(docs, preview_chars=200),
             elapsed_sec=elapsed_sec,
         )
     except Exception as exc:
@@ -140,6 +130,7 @@ def run_baseline(
         _ensure_project_importable()
         from conversation import ConversationManager
         import rag_pipeline
+        from source_utils import sources_from_docs
         from utils.config_loader import load_config
 
         config = load_config()
@@ -156,6 +147,7 @@ def run_baseline(
                 rag_pipeline=rag_pipeline,
                 config=config,
                 llm_model=selected_model,
+                source_serializer=sources_from_docs,
             )
             results.append(result)
 

@@ -1,0 +1,13 @@
+[project]
+name = "paper-rag"
+version = "0.1.0"
+description = "Local paper knowledge-base RAG system with retrieval, generation, evaluation, and observability."
+requires-python = ">=3.11"
+
+[tool.unittest]
+start-directory = "tests"
+pattern = "test*.py"
+
+[tool.paper-rag.commands]
+test = ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests"
+benchmark-schema = ".\\.venv\\Scripts\\python.exe benchmarks\\run_baseline.py --no-generate"
