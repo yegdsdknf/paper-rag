@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
     # 同时支持 `python -m eval.run_eval` 和直接运行 `python eval/run_eval.py`。
     sys.path.insert(0, str(ROOT))
 
-from eval.metrics import mrr, recall_at_k, source_hit_status
+from eval.metrics import answer_completeness, evidence_coverage, mrr, recall_at_k, source_hit_status
 
 
 DEFAULT_INPUT_PATH = Path("benchmarks") / "baseline_results_qwen2.5_3b.jsonl"
@@ -52,6 +52,69 @@ def _group_summary(items: list[dict[str, Any]], k: int) -> dict[str, Any]:
     }
 
 
+def _compression_ratio(context: dict[str, Any]) -> float:
+    input_chars = float(context.get("input_chars") or 0.0)
+    output_chars = float(context.get("output_chars") or 0.0)
+    if input_chars <= 0:
+        return 1.0
+    return round(output_chars / input_chars, 4)
+
+
+def _citation_accuracy(source_hit: str) -> float:
+    return {"full": 1.0, "partial": 0.5, "missing": 0.0}.get(source_hit, 0.0)
+
+
+def _error_bucket(error: str | None, skipped: bool, source_hit: str, completeness: float) -> str:
+    if error:
+        return "runtime_error"
+    if skipped:
+        return "skipped"
+    if source_hit == "missing":
+        return "retrieval_miss"
+    if source_hit == "partial":
+        return "partial_retrieval"
+    if completeness < 1.0:
+        return "answer_incomplete"
+    return "ok"
+
+
+def _layer_summary(items: list[dict[str, Any]], k: int) -> dict[str, Any]:
+    recall_key = f"recall_at_{k}"
+    hit_counts = Counter(item["retrieval"]["source_hit"] for item in items)
+    bucket_counts = Counter(item["error_bucket"] for item in items)
+    return {
+        "retrieval": {
+            f"avg_{recall_key}": _avg([item["retrieval"][recall_key] for item in items]),
+            "avg_mrr": _avg([item["retrieval"]["mrr"] for item in items]),
+            "source_hit_counts": {
+                "full": hit_counts.get("full", 0),
+                "partial": hit_counts.get("partial", 0),
+                "missing": hit_counts.get("missing", 0),
+            },
+        },
+        "context": {
+            "avg_source_doc_count": _avg([item["context"]["source_doc_count"] for item in items]),
+            "avg_context_doc_count": _avg([item["context"]["context_doc_count"] for item in items]),
+            "avg_input_chars": _avg([item["context"]["input_chars"] for item in items]),
+            "avg_output_chars": _avg([item["context"]["output_chars"] for item in items]),
+            "avg_compression_ratio": _avg([item["context"]["compression_ratio"] for item in items]),
+            "avg_parent_hit_count": _avg([item["context"]["parent_hit_count"] for item in items]),
+        },
+        "answer": {
+            "avg_evidence_coverage": _avg([item["answer"]["evidence_coverage"] for item in items]),
+            "avg_answer_completeness": _avg([item["answer"]["answer_completeness"] for item in items]),
+            "avg_citation_accuracy": _avg([item["answer"]["citation_accuracy"] for item in items]),
+            "avg_unsupported_claim_count": _avg([item["answer"]["unsupported_claim_count"] for item in items]),
+        },
+        "experience": {
+            "avg_elapsed_sec": _avg([float(item["experience"]["elapsed_sec"]) for item in items]),
+            "error_count": sum(1 for item in items if item["experience"]["error"]),
+            "skipped_count": sum(1 for item in items if item["experience"]["skipped"]),
+            "error_bucket_counts": dict(sorted(bucket_counts.items())),
+        },
+    }
+
+
 def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[str, Any]:
     recall_key = f"recall_at_{k}"
     evaluated: list[dict[str, Any]] = []
@@ -60,17 +123,54 @@ def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[st
         # 当前只评估检索层；生成质量暂时保留在人工报告中判断。
         retrieved = row.get("retrieved_sources", []) or []
         gold = row.get("gold_sources", []) or []
+        context = row.get("context", {}) or {}
+        source_hit = source_hit_status(retrieved, gold, k=k)
+        completeness = answer_completeness(row)
+        coverage = evidence_coverage(
+            str(row.get("predicted_answer", "")),
+            [str(item) for item in (row.get("gold_evidence") or [])],
+        )
+        citation_accuracy = _citation_accuracy(source_hit)
+        skipped = bool(row.get("skipped", False))
+        error = row.get("error")
         item = {
             "id": row.get("id"),
             "task_type": row.get("task_type", "unknown"),
             "difficulty": row.get("difficulty", "unknown"),
             recall_key: recall_at_k(retrieved, gold, k=k),
             "mrr": mrr(retrieved, gold),
-            "source_hit": source_hit_status(retrieved, gold, k=k),
+            "source_hit": source_hit,
             "elapsed_sec": row.get("elapsed_sec", 0.0) or 0.0,
-            "error": row.get("error"),
-            "skipped": bool(row.get("skipped", False)),
+            "error": error,
+            "skipped": skipped,
+            "retrieval": {
+                recall_key: recall_at_k(retrieved, gold, k=k),
+                "mrr": mrr(retrieved, gold),
+                "source_hit": source_hit,
+                "retrieved_count": len(retrieved),
+                "gold_source_count": len(gold),
+            },
+            "context": {
+                "source_doc_count": int(context.get("source_doc_count") or len(retrieved)),
+                "context_doc_count": int(context.get("context_doc_count") or len(retrieved)),
+                "input_chars": int(context.get("input_chars") or 0),
+                "output_chars": int(context.get("output_chars") or 0),
+                "compression_ratio": _compression_ratio(context),
+                "parent_hit_count": int(context.get("parent_hit_count") or 0),
+            },
+            "answer": {
+                "evidence_coverage": coverage,
+                "answer_completeness": completeness,
+                "citation_accuracy": citation_accuracy,
+                "unsupported_claim_count": int(row.get("unsupported_claim_count") or 0),
+            },
+            "experience": {
+                "elapsed_sec": row.get("elapsed_sec", 0.0) or 0.0,
+                "error": error,
+                "skipped": skipped,
+            },
         }
+        item["error_bucket"] = _error_bucket(error, skipped, source_hit, completeness)
         evaluated.append(item)
 
     hit_counts = Counter(item["source_hit"] for item in evaluated)
@@ -88,6 +188,7 @@ def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[st
             recall_key: item[recall_key],
             "mrr": item["mrr"],
             "source_hit": item["source_hit"],
+            "error_bucket": item["error_bucket"],
         }
         for item in evaluated
         if item[recall_key] < 1.0
@@ -107,6 +208,8 @@ def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[st
             "partial": hit_counts.get("partial", 0),
             "missing": hit_counts.get("missing", 0),
         },
+        "layers": _layer_summary(evaluated, k),
+        "error_bucket_counts": dict(sorted(Counter(item["error_bucket"] for item in evaluated).items())),
         "error_count": sum(1 for item in evaluated if item["error"]),
         "skipped_count": sum(1 for item in evaluated if item["skipped"]),
         "low_recall_samples": low_recall_samples,

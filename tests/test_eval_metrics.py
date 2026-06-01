@@ -1,6 +1,8 @@
 import unittest
 
 from eval.metrics import (
+    answer_completeness,
+    evidence_coverage,
     mrr,
     recall_at_k,
     source_hit_status,
@@ -47,6 +49,21 @@ class EvalMetricsTest(unittest.TestCase):
         self.assertEqual(source_hit_status([], gold), "missing")
         self.assertEqual(source_hit_status([{"file": "bert.pdf", "page": 1}], gold), "partial")
         self.assertEqual(source_hit_status(gold, gold), "full")
+
+    def test_evidence_coverage_counts_gold_evidence_present_in_answer(self):
+        answer = "BERT uses bidirectional pre-training and masked language modeling."
+        evidence = ["bidirectional pre-training", "masked language modeling", "next sentence prediction"]
+
+        self.assertEqual(evidence_coverage(answer, evidence), 0.6667)
+
+    def test_answer_completeness_prefers_key_points_over_gold_evidence(self):
+        row = {
+            "predicted_answer": "Transformer uses self-attention and positional encodings.",
+            "gold_evidence": ["self-attention", "feed-forward"],
+            "key_points": ["self-attention", "positional encodings"],
+        }
+
+        self.assertEqual(answer_completeness(row), 1.0)
 
 
 if __name__ == "__main__":

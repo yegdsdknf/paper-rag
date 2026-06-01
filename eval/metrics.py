@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 
@@ -71,3 +72,23 @@ def source_hit_status(
     if hits > 0:
         return "partial"
     return "missing"
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text).lower()).strip()
+
+
+def evidence_coverage(answer: str, evidence_items: list[str]) -> float:
+    """用轻量字符串覆盖率衡量答案是否包含人工标注的关键证据。"""
+    if not evidence_items:
+        return 1.0
+    normalized_answer = _normalize_text(answer)
+    hits = sum(1 for item in evidence_items if _normalize_text(item) in normalized_answer)
+    return round(hits / len(evidence_items), 4)
+
+
+def answer_completeness(row: dict[str, Any]) -> float:
+    targets = row.get("key_points") or row.get("gold_evidence") or []
+    if isinstance(targets, str):
+        targets = [targets]
+    return evidence_coverage(str(row.get("predicted_answer", "")), [str(item) for item in targets])

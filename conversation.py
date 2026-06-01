@@ -1,5 +1,32 @@
 """多轮对话管理器：存储历史 + 改写追问"""
+import re
+
 from utils.ollama_client import create_chat_ollama
+
+
+SOURCE_NAMES = ["BERT", "GPT-3", "GPT3", "T5", "ViT", "DeepSeek-R1", "DeepSeek-R1-Zero", "FFA-Net"]
+
+
+def _source_from_history(history: list[dict]) -> str | None:
+    text = "\n".join(str(item.get("content", "")) for item in history[-6:])
+    for source in SOURCE_NAMES:
+        if re.search(re.escape(source), text, flags=re.IGNORECASE):
+            return "GPT-3" if source.upper() == "GPT3" else source
+    return None
+
+
+def _needs_source_followup(question: str) -> bool:
+    q_lower = question.lower()
+    return any(signal in q_lower for signal in ["另一个", "这个", "它", "another", "the other"])
+
+
+def _ensure_followup_source(question: str, rewritten: str, history: list[dict]) -> str:
+    if not _needs_source_followup(question):
+        return rewritten
+    source = _source_from_history(history)
+    if not source or re.search(re.escape(source), rewritten, flags=re.IGNORECASE):
+        return rewritten
+    return f"{source} {rewritten}"
 
 
 class ConversationManager:
@@ -78,7 +105,7 @@ class ConversationManager:
         独立问题："""
         response = self.llm.invoke(prompt)
         result = response.content if hasattr(response, "content") else str(response)
-        return result.strip()
+        return _ensure_followup_source(question, result.strip(), self.history)
 
     def format_history(self) -> str:
         """格式化历史，用于注入生成 prompt"""

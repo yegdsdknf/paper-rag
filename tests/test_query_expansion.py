@@ -84,7 +84,10 @@ class FakeVectorStore:
         metadatas = []
         for source in ["bert.pdf", "gpt3.pdf", "t5.pdf", "attention is all you need.pdf"]:
             for page in range(4):
-                docs.append(f"{source} page {page}")
+                content = f"{source} page {page}"
+                if source == "attention is all you need.pdf" and page == 0:
+                    content = "Attention Is All You Need. We propose a new simple network architecture, the Transformer."
+                docs.append(content)
                 metadatas.append({"source": source, "page": page})
         return {"documents": docs, "metadatas": metadatas}
 

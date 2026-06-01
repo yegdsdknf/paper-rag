@@ -7,6 +7,7 @@
 | 文件 | 说明 |
 |---|---|
 | `benchmark_v1.jsonl` | 任务文档约定的基准集入口文件，覆盖 25 条样本。 |
+| `holdout_v1.jsonl` | 独立留出评估集，问题文本不与 `benchmark_v1.jsonl` 重复，用于检查检索规则是否过拟合。 |
 | `run_baseline.py` | 基线跑分脚本，读取基准集并输出当前 RAG 系统的回答结果。 |
 | `baseline_results.jsonl` | 基线跑分输出文件，由 `run_baseline.py` 生成。 |
 | `feedback/feedback.jsonl` | 真实使用反馈暂存文件，用于后续人工筛选并回流到基准集。 |
@@ -47,6 +48,14 @@ python benchmarks/run_baseline.py --no-generate
 .\.venv\Scripts\python.exe benchmarks/run_baseline.py
 ```
 
+运行 holdout 留出集：
+
+```powershell
+.\.venv\Scripts\python.exe benchmarks/run_baseline.py --benchmark benchmarks/holdout_v1.jsonl --output benchmarks/holdout_results_qwen2.5_3b.jsonl
+```
+
+holdout 只用于最终验证，不应用来继续调具体规则。若必须根据 holdout 暴露的问题修改系统，应先把该问题移入下一版训练/开发集，再重新创建新的 holdout。
+
 ## 离线自动评估
 
 任务 3 的评估脚本只读取已有 baseline 结果，不重新调用模型，避免把模型输出波动混入评估脚本验证。
@@ -54,9 +63,29 @@ python benchmarks/run_baseline.py --no-generate
 ```powershell
 python eval/run_eval.py --input benchmarks/baseline_results_qwen2.5_3b.jsonl --label qwen2_5_3b
 python eval/run_eval.py --input benchmarks/baseline_results_deepseek_r1_7b.jsonl --label deepseek_r1_7b
+python eval/run_eval.py --input benchmarks/holdout_results_qwen2.5_3b.jsonl --label holdout_qwen2_5_3b
 ```
 
 报告会写入 `eval/reports/`，包含样本数、平均 Recall@5、平均 MRR、来源命中统计、低召回样本清单，以及按题型和难度聚合的结果。
+
+第二阶段后，报告会额外输出 `layers` 和 `error_bucket_counts`：
+
+| 层级 / 字段 | 说明 |
+|---|---|
+| `layers.retrieval` | 检索层指标，包括 Recall@K、MRR、来源命中统计。 |
+| `layers.context` | 上下文层指标，包括输入/输出字符数、压缩率、parent 命中数量。 |
+| `layers.answer` | 答案层指标，包括证据覆盖率、答案完整度、引用准确度和未支撑声明数量。 |
+| `layers.experience` | 体验层指标，包括平均耗时、错误数、跳过数和错误桶分布。 |
+| `error_bucket_counts` | 将样本归入 `retrieval_miss`、`partial_retrieval`、`answer_incomplete`、`runtime_error`、`skipped` 或 `ok`，用于定位下一轮优化方向。 |
+
+## 抗过拟合评估约定
+
+| 集合 | 用途 | 允许行为 |
+|---|---|---|
+| `benchmark_v1.jsonl` | 开发/回归集，用于定位和修复已知失败模式。 | 可以基于错误分析修改检索、上下文和生成策略。 |
+| `holdout_v1.jsonl` | 留出集，用于验证修复是否泛化到新问法。 | 只读评估；不要直接按单条 holdout 失败样本调规则。 |
+
+对比报告时优先看两组指标的差距：如果开发集 Recall@5 明显高于 holdout，说明当前策略可能仍有过拟合或来源解析覆盖不足。
 
 ## 样本回流
 
