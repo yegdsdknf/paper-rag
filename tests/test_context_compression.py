@@ -53,6 +53,29 @@ class ContextCompressionTest(unittest.TestCase):
         )
         self.assertEqual(compressed_docs[0].page_content, "BERT uses masked language modeling.")
 
+    def test_compress_documents_preserves_vision_summary_details(self):
+        vision_text = (
+            "1. 页面类型：figure\n"
+            "2. 图表编号或标题：Figure 14 | Multilingual safety performance.\n"
+            "3. 主要内容：图14展示了 DeepSeek-V3 和 DeepSeek-R1 的 multilingual safety performance。\n"
+            "4. 关键指标/数值/趋势：丹麦语在 V3-check 下约为77.6，在 R1-check 下约为87.6；"
+            "乌克兰语和乌兹别克语也展示了不同安全评分趋势。\n"
+            "5. 可用于回答的问题：DeepSeek-R1 在多语言安全评估中表现如何？"
+        )
+        docs = [
+            Document(
+                page_content=vision_text,
+                metadata={"source": "deepseekr1.pdf", "page": 51, "block_type": "vision_summary"},
+            )
+        ]
+
+        compressed_docs = compress_documents("DeepSeek-R1 multilingual safety performance", docs, max_sentences=1)
+
+        self.assertEqual(compressed_docs[0].page_content, vision_text)
+        self.assertFalse(compressed_docs[0].metadata["context_compressed"])
+        self.assertIn("丹麦语", compressed_docs[0].page_content)
+        self.assertIn("87.6", compressed_docs[0].page_content)
+
     def test_generate_answer_compresses_prompt_context_without_mutating_sources(self):
         docs = [
             Document(

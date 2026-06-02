@@ -22,6 +22,19 @@ def _compatibility_payload(settings: Any) -> dict[str, Any]:
         "chunk_size": int(get_setting(settings, "chunk_size", 0)),
         "chunk_overlap": int(get_setting(settings, "chunk_overlap", 0)),
         "separators": list(get_setting(settings, "separators", []) or []),
+        "section_heading_detection": bool(get_setting(settings, "section_heading_detection", True)),
+        "section_min_chars": int(get_setting(settings, "section_min_chars", 120)),
+        "section_max_chars": int(get_setting(settings, "section_max_chars", 900)),
+        "preserve_abstract": bool(get_setting(settings, "preserve_abstract", True)),
+        "references_policy": get_setting(settings, "references_policy", "keep_with_metadata"),
+        "semantic_similarity_threshold": float(get_setting(settings, "semantic_similarity_threshold", 0.7)),
+        "semantic_min_chars": int(get_setting(settings, "semantic_min_chars", 180)),
+        "semantic_max_chars": int(get_setting(settings, "semantic_max_chars", 900)),
+        "enable_vision_analysis": bool(get_setting(settings, "enable_vision_analysis", False)),
+        "vision_model": get_setting(settings, "vision_model", "qwen2.5vl:3b"),
+        "vision_prompt_version": get_setting(settings, "vision_prompt_version", "v1"),
+        "vision_trigger_policy": get_setting(settings, "vision_trigger_policy", "noisy_or_figure_page"),
+        "vision_visual_density_threshold": float(get_setting(settings, "vision_visual_density_threshold", 0.35)),
     }
 
 
@@ -42,6 +55,7 @@ def build_index_manifest(
     chunk_count: int,
     embedding_device: str,
     created_at: str | None = None,
+    vision_stats: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     created = created_at or datetime.now(timezone.utc).isoformat()
     hashes = file_hashes or {}
@@ -56,7 +70,7 @@ def build_index_manifest(
             }
         )
 
-    return {
+    manifest = {
         "index_version": build_index_version(settings),
         "created_at": created,
         "collection_name": get_setting(settings, "collection_name", "langchain"),
@@ -68,9 +82,30 @@ def build_index_manifest(
         "chunk_size": int(get_setting(settings, "chunk_size", 0)),
         "chunk_overlap": int(get_setting(settings, "chunk_overlap", 0)),
         "separators": list(get_setting(settings, "separators", []) or []),
+        "section_heading_detection": bool(get_setting(settings, "section_heading_detection", True)),
+        "section_min_chars": int(get_setting(settings, "section_min_chars", 120)),
+        "section_max_chars": int(get_setting(settings, "section_max_chars", 900)),
+        "preserve_abstract": bool(get_setting(settings, "preserve_abstract", True)),
+        "references_policy": get_setting(settings, "references_policy", "keep_with_metadata"),
+        "semantic_similarity_threshold": float(get_setting(settings, "semantic_similarity_threshold", 0.7)),
+        "semantic_min_chars": int(get_setting(settings, "semantic_min_chars", 180)),
+        "semantic_max_chars": int(get_setting(settings, "semantic_max_chars", 900)),
         "chunk_count": int(chunk_count),
         "source_files": sources,
     }
+    manifest["vision_analysis"] = {
+        "enabled": bool(get_setting(settings, "enable_vision_analysis", False)),
+        "model": get_setting(settings, "vision_model", "qwen2.5vl:3b"),
+        "prompt_version": get_setting(settings, "vision_prompt_version", "v1"),
+        "cache_dir": get_setting(settings, "vision_cache_dir", "./data/vision_cache"),
+        "force_refresh": bool(get_setting(settings, "vision_force_refresh", False)),
+        "trigger_policy": get_setting(settings, "vision_trigger_policy", "noisy_or_figure_page"),
+        "visual_density_threshold": float(get_setting(settings, "vision_visual_density_threshold", 0.35)),
+        "max_pages_per_doc": int(get_setting(settings, "vision_max_pages_per_doc", 20)),
+        "force_pages": dict(get_setting(settings, "vision_force_pages", {}) or {}),
+        "stats": dict(vision_stats or {}),
+    }
+    return manifest
 
 
 def save_index_manifest(manifest: Mapping[str, Any], settings: Any) -> Path:

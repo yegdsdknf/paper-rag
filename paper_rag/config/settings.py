@@ -41,7 +41,23 @@ class RagSettings:
     enable_query_logging: bool = False
     query_log_path: str = "logs/query_runs.jsonl"
     semantic_similarity_threshold: float = 0.7
+    section_heading_detection: bool = True
+    section_min_chars: int = 120
+    section_max_chars: int = 900
+    preserve_abstract: bool = True
+    references_policy: str = "keep_with_metadata"
+    semantic_min_chars: int = 180
+    semantic_max_chars: int = 900
     skip_pages: dict[str, list[int]] = field(default_factory=dict)
+    enable_vision_analysis: bool = False
+    vision_model: str = "qwen2.5vl:3b"
+    vision_prompt_version: str = "v1"
+    vision_cache_dir: str = "./data/vision_cache"
+    vision_force_refresh: bool = False
+    vision_trigger_policy: str = "noisy_or_figure_page"
+    vision_visual_density_threshold: float = 0.35
+    vision_max_pages_per_doc: int = 20
+    vision_force_pages: dict[str, list[int]] = field(default_factory=dict)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "RagSettings":
@@ -93,7 +109,23 @@ class RagSettings:
             enable_query_logging=bool(data.get("enable_query_logging", False)),
             query_log_path=str(data.get("query_log_path", "logs/query_runs.jsonl")),
             semantic_similarity_threshold=float(data.get("semantic_similarity_threshold", 0.7)),
+            section_heading_detection=bool(data.get("section_heading_detection", True)),
+            section_min_chars=int(data.get("section_min_chars", 120)),
+            section_max_chars=int(data.get("section_max_chars", 900)),
+            preserve_abstract=bool(data.get("preserve_abstract", True)),
+            references_policy=str(data.get("references_policy", "keep_with_metadata")),
+            semantic_min_chars=int(data.get("semantic_min_chars", 180)),
+            semantic_max_chars=int(data.get("semantic_max_chars", 900)),
             skip_pages=_normalize_skip_pages(data.get("skip_pages", {})),
+            enable_vision_analysis=bool(data.get("enable_vision_analysis", False)),
+            vision_model=str(data.get("vision_model", "qwen2.5vl:3b")),
+            vision_prompt_version=str(data.get("vision_prompt_version", "v1")),
+            vision_cache_dir=str(data.get("vision_cache_dir", "./data/vision_cache")),
+            vision_force_refresh=bool(data.get("vision_force_refresh", False)),
+            vision_trigger_policy=str(data.get("vision_trigger_policy", "noisy_or_figure_page")),
+            vision_visual_density_threshold=float(data.get("vision_visual_density_threshold", 0.35)),
+            vision_max_pages_per_doc=int(data.get("vision_max_pages_per_doc", 20)),
+            vision_force_pages=_normalize_skip_pages(data.get("vision_force_pages", {})),
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -129,7 +161,23 @@ class RagSettings:
             "enable_query_logging": self.enable_query_logging,
             "query_log_path": self.query_log_path,
             "semantic_similarity_threshold": self.semantic_similarity_threshold,
+            "section_heading_detection": self.section_heading_detection,
+            "section_min_chars": self.section_min_chars,
+            "section_max_chars": self.section_max_chars,
+            "preserve_abstract": self.preserve_abstract,
+            "references_policy": self.references_policy,
+            "semantic_min_chars": self.semantic_min_chars,
+            "semantic_max_chars": self.semantic_max_chars,
             "skip_pages": dict(self.skip_pages),
+            "enable_vision_analysis": self.enable_vision_analysis,
+            "vision_model": self.vision_model,
+            "vision_prompt_version": self.vision_prompt_version,
+            "vision_cache_dir": self.vision_cache_dir,
+            "vision_force_refresh": self.vision_force_refresh,
+            "vision_trigger_policy": self.vision_trigger_policy,
+            "vision_visual_density_threshold": self.vision_visual_density_threshold,
+            "vision_max_pages_per_doc": self.vision_max_pages_per_doc,
+            "vision_force_pages": dict(self.vision_force_pages),
         }
 
 

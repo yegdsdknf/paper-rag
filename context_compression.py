@@ -90,10 +90,20 @@ def compress_documents(
 ) -> list[Document]:
     compressed_docs: list[Document] = []
     for doc in docs:
-        compressed_text = compress_chunk(query, doc.page_content, max_sentences=max_sentences)
+        if _is_vision_summary(doc):
+            compressed_text = doc.page_content
+        else:
+            compressed_text = compress_chunk(query, doc.page_content, max_sentences=max_sentences)
         metadata = dict(doc.metadata)
         metadata["context_original_chars"] = len(doc.page_content)
         metadata["context_compressed_chars"] = len(compressed_text)
         metadata["context_compressed"] = compressed_text != doc.page_content
         compressed_docs.append(Document(page_content=compressed_text, metadata=metadata))
     return compressed_docs
+
+
+def _is_vision_summary(doc: Document) -> bool:
+    return (
+        doc.metadata.get("block_type") == "vision_summary"
+        or doc.metadata.get("chunk_strategy") == "vision_summary"
+    )

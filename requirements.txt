@@ -3,6 +3,7 @@ langchain-community>=0.3.0
 langchain-ollama>=0.2.0
 chromadb>=0.5.0
 pypdf>=5.0.0
+pymupdf>=1.24.0
 pyyaml>=6.0
 rank_bm25>=0.2.0
 # torch 用于 GPU 加速的嵌入模型推理；请按你的 CUDA/驱动环境安装对应 PyTorch 版本
