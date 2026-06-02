@@ -1,13 +1,26 @@
 # ============ 向量数据库配置 ============
-collection_name: langchain
-persist_directory: ./chroma_db
+#collection_name: langchain
+#persist_directory: ./chroma_db
+
+#语义分块配置
+#persist_directory: ./chroma_db_experiments/semantic_v3
+#collection_name: langchain_semantic_v3
+#chunk_strategy: semantic
+#chunk_schema_version: v3
+
+#混合结构语义分块 + 视觉摘要实验库
+persist_directory: ./chroma_db_experiments/vision_v1
+collection_name: langchain_vision_v1
+chunk_strategy: hybrid_section_semantic
+chunk_schema_version: v4
+
 k: 6                           # 检索返回 TOP-K，论文问答建议 3~5
 
 # ============ 文本分块配置 ============
 chunk_size: 500                   # 每个文本块最大字符数
 chunk_overlap: 100                # 相邻块重叠字符数（防切断句子）
-chunk_strategy: recursive_character
-chunk_schema_version: v1
+#chunk_strategy: recursive_character
+#chunk_schema_version: v1
 index_manifest_filename: index_manifest.json
 separators:
   - "\n\n"
@@ -17,6 +30,14 @@ separators:
   - " "
   - ""
 
+# ============ 论文结构感知分块（实验策略）============
+# 可将 chunk_strategy 切换为 section_aware；默认保留 recursive_character 作为 baseline。
+section_heading_detection: true
+section_min_chars: 120
+section_max_chars: 900
+preserve_abstract: true
+references_policy: keep_with_metadata
+
 # ============ 模型配置 ============
 # embedding_model: nomic-embed-text # 嵌入模型（Phase 2 可换 bge-m3）
 embedding_model: BAAI/bge-m3
@@ -25,6 +46,18 @@ llm_model_reasoning: deepseek-r1:7b  # reasoning 对照模型（需要时切换�
 temperature: 0.1                  # 论文问答越低越好（0~1，越低越确定）
 llm_num_ctx: 4096                 # 推荐上下文窗口：8GB 卡上更稳，能显著降低截断风险
 llm_num_predict: 1024             # 推荐输出上限：避免长答案被提前截断
+
+# ============ 视觉摘要入库（Vision RAG v1，默认关闭）============
+# 仅在 build 阶段调用视觉模型，查询阶段仍走文本 RAG。
+enable_vision_analysis: true
+vision_model: qwen2.5vl:3b
+vision_prompt_version: v1
+vision_cache_dir: ./data/vision_cache
+vision_force_refresh: false
+vision_trigger_policy: forced_only
+vision_visual_density_threshold: 0.35
+vision_max_pages_per_doc: 20
+vision_force_pages: {deepseekr1.pdf: [51]}
 
 # ============ 混合检索权重（Phase 2 启用）============
 # 向量权重高 = 重语义 · BM25 权重高 = 重关键词精准匹配
@@ -61,9 +94,17 @@ query_log_path: logs/query_runs.jsonl
 
 # ============ 语义切割阈值（Phase 2 智能分块用）============
 semantic_similarity_threshold: 0.7
+semantic_min_chars: 180
+semantic_max_chars: 900
 
 # ============ PDF 页面跳过（可配置，按文件名关键词匹配）============
 # 格式: 文件名关键词: [页码列表]
 skip_pages:
-  deepseekr1: [10, 11, 12, 13, 74, 75, 76, 77]
-  vit: [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199]
+  deepseekr1: [78, 79, 80, 81, 82, 83, 84, 85]
+  vit: [9, 10, 11]
+  t5: [57, 58, 59, 60, 61, 62, 63, 64, 65, 66]
+  gpt3: [41, 67, 68, 69, 70, 71, 72, 73, 74]
+  bert: [9, 10]
+  attention is all you need: [10 ,11]
+  1911.07559v2: [7]
+

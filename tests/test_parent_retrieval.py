@@ -58,6 +58,66 @@ class ParentRetrievalTest(unittest.TestCase):
         self.assertEqual(parent_docs[0].metadata["page"], 1)
         self.assertTrue(parent_docs[0].metadata["parent_context"])
 
+    def test_expand_parent_pages_uses_page_chunk_index_order(self):
+        class ShuffledVectorStore:
+            def get(self, include=None):
+                return {
+                    "documents": ["middle", "opening", "closing"],
+                    "metadatas": [
+                        {"source": "paper.pdf", "page": 1, "page_chunk_index": 1},
+                        {"source": "paper.pdf", "page": 1, "page_chunk_index": 0},
+                        {"source": "paper.pdf", "page": 1, "page_chunk_index": 2},
+                    ],
+                }
+
+        class ShuffledHybrid:
+            vector_store = ShuffledVectorStore()
+
+        child_docs = [
+            Document(page_content="middle", metadata={"source": "paper.pdf", "page": 1})
+        ]
+
+        parent_docs = expand_parent_pages(ShuffledHybrid(), child_docs, max_chars_per_parent=200)
+
+        self.assertEqual(parent_docs[0].page_content, "opening\n\nmiddle\n\nclosing")
+
+    def test_expand_parent_pages_preserves_vision_summary_child(self):
+        class VisionVectorStore:
+            def get(self, include=None):
+                return {
+                    "documents": ["Figure 14 vision summary with Danish 87.6 score"],
+                    "metadatas": [
+                        {
+                            "source": "deepseekr1.pdf",
+                            "page": 51,
+                            "block_type": "vision_summary",
+                            "chunk_strategy": "vision_summary",
+                        }
+                    ],
+                }
+
+        class VisionHybrid:
+            vector_store = VisionVectorStore()
+
+        child_docs = [
+            Document(
+                page_content="Figure 14 vision summary with Danish 87.6 score",
+                metadata={
+                    "source": "deepseekr1.pdf",
+                    "page": 51,
+                    "block_type": "vision_summary",
+                    "chunk_strategy": "vision_summary",
+                },
+            )
+        ]
+
+        parent_docs = expand_parent_pages(VisionHybrid(), child_docs, max_chars_per_parent=200)
+
+        self.assertEqual(len(parent_docs), 1)
+        self.assertEqual(parent_docs[0].page_content, child_docs[0].page_content)
+        self.assertEqual(parent_docs[0].metadata["block_type"], "vision_summary")
+        self.assertNotIn("parent_context", parent_docs[0].metadata)
+
     def test_generate_answer_uses_parent_context_without_mutating_sources(self):
         child_docs = [
             Document(

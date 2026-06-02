@@ -23,7 +23,7 @@ def main():
     if command == "build":
         print("🏗️  启动论文入库...\n")
         import build_knowledge
-        build_knowledge.main()
+        build_knowledge.main(sys.argv[2:])
     elif command == "query":
         print("📚 启动问答系统...\n")
         import query
