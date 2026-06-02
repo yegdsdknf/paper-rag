@@ -36,10 +36,15 @@ class AgenticRagState(TypedDict, total=False):
     task_type: str
     route: str
     source_hints: list[str]
+    llm_model: str
+    temperature: float
+    max_repair_rounds: int
     goals: list[EvidenceGoal]
     collected_docs: list[Document]
+    collected_docs_by_goal: dict[str, list[Document]]
     verified_evidence: list[VerifiedEvidence]
     final_docs: list[Document]
+    verified_summary: str
     repair_rounds: int
     missing_goal_ids: list[str]
     fallback_reason: str | None
@@ -47,6 +52,11 @@ class AgenticRagState(TypedDict, total=False):
     answer: str
     sources: list[dict[str, Any]]
     elapsed: dict[str, float]
+    _hybrid: Any
+    _router: Any
+    _planner_llm: Any
+    _verifier_llm: Any
+    _agent_start: float
 
 
 def normalize_goal(raw: dict[str, Any], index: int, allowed_sources: set[str] | None = None) -> EvidenceGoal:
