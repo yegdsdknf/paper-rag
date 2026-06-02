@@ -115,6 +115,47 @@ def _layer_summary(items: list[dict[str, Any]], k: int) -> dict[str, Any]:
     }
 
 
+def _agent_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+    enabled_traces = [
+        item["agent_trace"]
+        for item in items
+        if (item.get("agent_trace") or {}).get("enabled")
+    ]
+    verification_items = [
+        verification
+        for trace in enabled_traces
+        for verification in (trace.get("verification") or [])
+    ]
+    repair_traces = [
+        trace
+        for trace in enabled_traces
+        if int(trace.get("repair_rounds") or 0) > 0
+    ]
+    return {
+        "enabled_count": len(enabled_traces),
+        "avg_evidence_goal_count": _avg([
+            float(len(trace.get("plan") or []))
+            for trace in enabled_traces
+        ]),
+        "goal_support_rate": _avg([
+            1.0 if verification.get("status") == "supported" else 0.0
+            for verification in verification_items
+        ]),
+        "repair_trigger_rate": _avg([
+            1.0 if int(trace.get("repair_rounds") or 0) > 0 else 0.0
+            for trace in enabled_traces
+        ]),
+        "repair_success_rate": _avg([
+            1.0 if trace.get("repair_success") else 0.0
+            for trace in repair_traces
+        ]),
+        "avg_agent_elapsed_sec": _avg([
+            float(trace.get("agent_elapsed_sec") or 0.0)
+            for trace in enabled_traces
+        ]),
+    }
+
+
 def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[str, Any]:
     recall_key = f"recall_at_{k}"
     evaluated: list[dict[str, Any]] = []
@@ -133,6 +174,7 @@ def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[st
         citation_accuracy = _citation_accuracy(source_hit)
         skipped = bool(row.get("skipped", False))
         error = row.get("error")
+        agent_trace = row.get("agent_trace") or {}
         item = {
             "id": row.get("id"),
             "task_type": row.get("task_type", "unknown"),
@@ -169,6 +211,7 @@ def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[st
                 "error": error,
                 "skipped": skipped,
             },
+            "agent_trace": agent_trace,
         }
         item["error_bucket"] = _error_bucket(error, skipped, source_hit, completeness)
         evaluated.append(item)
@@ -209,6 +252,7 @@ def evaluate_rows(rows: list[dict[str, Any]], label: str, k: int = 5) -> dict[st
             "missing": hit_counts.get("missing", 0),
         },
         "layers": _layer_summary(evaluated, k),
+        "agent": _agent_summary(evaluated),
         "error_bucket_counts": dict(sorted(Counter(item["error_bucket"] for item in evaluated).items())),
         "error_count": sum(1 for item in evaluated if item["error"]),
         "skipped_count": sum(1 for item in evaluated if item["skipped"]),
