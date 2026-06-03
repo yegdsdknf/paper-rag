@@ -47,11 +47,13 @@ class QueryLoggerTest(unittest.TestCase):
                 "query_expansion": False,
                 "context_compression": True,
                 "parent_retrieval": False,
+                "agentic_query": True,
             },
             docs=docs,
             elapsed={"rewrite": 0.01, "retrieve": 0.2, "generate": 1.0, "total": 1.21},
             query_variants=["bert definition"],
             context_stats={"input_chars": 100, "output_chars": 60},
+            agent_trace={"enabled": True, "repair_rounds": 1},
         )
 
         self.assertEqual(record["question"], "BERT 是什么？")
@@ -65,6 +67,7 @@ class QueryLoggerTest(unittest.TestCase):
                 "query_expansion": False,
                 "context_compression": True,
                 "parent_retrieval": False,
+                "agentic_query": True,
             },
         )
         self.assertEqual(record["retrieved_sources"][0]["file"], "bert.pdf")
@@ -72,6 +75,7 @@ class QueryLoggerTest(unittest.TestCase):
         self.assertEqual(record["retrieved_sources"][0]["rerank_score"], 0.9)
         self.assertEqual(record["elapsed"]["total"], 1.21)
         self.assertEqual(record["context"]["output_chars"], 60)
+        self.assertEqual(record["agent_trace"]["repair_rounds"], 1)
         self.assertIn("timestamp", record)
 
     def test_save_query_log_record_appends_jsonl(self):
@@ -93,6 +97,7 @@ class QueryLoggerTest(unittest.TestCase):
             rows = path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(rows), 1)
             self.assertEqual(json.loads(rows[0])["route"], "hyde")
+            self.assertEqual(json.loads(rows[0])["agent_trace"], {})
 
     def test_ask_with_context_writes_query_log_when_enabled(self):
         docs = [Document(page_content="answer evidence", metadata={"source": "paper.pdf", "page": 1})]

@@ -23,8 +23,11 @@ def build_query_log_record(
     feature_flags: dict[str, bool] | None = None,
     query_variants: list[str] | None = None,
     context_stats: dict[str, Any] | None = None,
+    agent_trace: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
+    flags = dict(feature_flags or {})
+    flags["agentic_query"] = bool(flags.get("agentic_query", False))
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "question": question,
@@ -33,10 +36,11 @@ def build_query_log_record(
         "llm_model": llm_model,
         "embedding_device": embedding_device,
         "index_version": index_version or "unknown",
-        "feature_flags": feature_flags or {},
+        "feature_flags": flags,
         "query_variants": query_variants or [],
         "retrieved_sources": sources_from_docs(docs, preview_chars=200),
         "context": context_stats or {},
+        "agent_trace": agent_trace or {},
         "elapsed": {key: round(float(value), 4) for key, value in elapsed.items()},
         "error": error,
     }

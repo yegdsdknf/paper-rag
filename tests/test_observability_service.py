@@ -89,6 +89,7 @@ class QueryLogServiceTest(unittest.TestCase):
                     "query_expansion": False,
                     "context_compression": True,
                     "parent_retrieval": False,
+                    "agentic_query": False,
                 },
             )
             self.assertEqual(record["retrieved_sources"][0]["file"], "paper.pdf")

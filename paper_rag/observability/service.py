@@ -14,6 +14,7 @@ def _feature_flags(settings: Any) -> dict[str, bool]:
         "query_expansion": bool(get_setting(settings, "enable_query_expansion", False)),
         "context_compression": bool(get_setting(settings, "enable_context_compression", False)),
         "parent_retrieval": bool(get_setting(settings, "enable_parent_retrieval", False)),
+        "agentic_query": bool(get_setting(settings, "enable_agentic_query", False)),
     }
 
 
@@ -27,6 +28,7 @@ def write_query_log(
     elapsed: dict[str, float],
     embedding_device_fn: Callable[[], str],
     context_stats: dict[str, Any] | None = None,
+    agent_trace: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> Path | None:
     """按配置写入查询日志；关闭日志时不产生副作用。"""
@@ -44,6 +46,7 @@ def write_query_log(
         docs=docs,
         elapsed=elapsed,
         context_stats=context_stats,
+        agent_trace=agent_trace,
         error=error,
     )
     return save_query_log_record(record, get_setting(settings, "query_log_path", "logs/query_runs.jsonl"))

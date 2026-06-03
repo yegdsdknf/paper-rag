@@ -9,6 +9,7 @@ except ImportError:
     torch = None
 
 import os
+from typing import Any
 
 # 基准评估默认只使用本地模型文件，避免 transformers 导入后启动联网元数据查询。
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -23,6 +24,7 @@ from utils.prompt_loader import load_prompt
 from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
 from paper_rag.config import RagSettings
+from paper_rag.agentic.graph import run_agentic_rag
 from query_expansion import expand_query
 from reranker import apply_rerank
 from context_builder import build_context_stats, prepare_docs_for_context
@@ -139,6 +141,7 @@ def _write_query_log(
     docs: list,
     elapsed: dict[str, float],
     context_stats: dict | None = None,
+    agent_trace: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> None:
     write_query_log(
@@ -151,6 +154,7 @@ def _write_query_log(
         elapsed=elapsed,
         embedding_device_fn=_get_embedding_device,
         context_stats=context_stats,
+        agent_trace=agent_trace,
         error=error,
     )
 
@@ -169,6 +173,47 @@ def _load_anchor_docs_by_page(hybrid: HybridRetriever, source_files: list[str], 
 
 def _get_compare_anchor_docs(hybrid: HybridRetriever, question: str) -> list[Document]:
     return get_compare_anchor_docs(hybrid, question)
+
+
+def _create_llm(llm_model: str = LLM_MODEL, temperature: float = TEMPERATURE):
+    """为 agentic planner/verifier 创建 LLM，沿用现有缓存与连接检查。"""
+    return _get_llm(llm_model or LLM_MODEL, temperature)
+
+
+def _classify_agentic_task(question: str) -> str:
+    if is_comparison_question(question):
+        return "compare"
+    q_lower = question.lower()
+    figure_signals = ["figure", "图", "图表", "图片", "示意图"]
+    is_evidence = is_evidence_question(question)
+    if is_evidence and any(signal in q_lower for signal in figure_signals):
+        return "figure"
+    if is_evidence:
+        return "evidence"
+    return "method"
+
+
+def _should_use_agentic(
+    question: str,
+    settings: RagSettings,
+    force_agent: bool | None = None,
+) -> bool:
+    if force_agent is not None:
+        return force_agent
+    if not settings.enable_agentic_query:
+        return False
+    if not settings.agent_auto_for_complex:
+        return True
+    if is_comparison_question(question) or is_evidence_question(question):
+        return True
+
+    q_lower = question.lower()
+    complex_signals = [
+        "分别", "同时", "多个", "哪些", "为什么", "如何证明", "是否支持",
+        "总结并", "先", "再", "compare and", "summarize and", "why", "how does",
+        "multiple", "several", "evidence for",
+    ]
+    return len(question) >= 80 and any(signal in q_lower for signal in complex_signals)
 
 
 def _retrieve(hybrid: HybridRetriever, query: str) -> list:
@@ -254,6 +299,7 @@ def _generate_answer(
     temperature: float = TEMPERATURE,
     hybrid: HybridRetriever | None = None,
     prepared_context_docs: list | None = None,
+    verified_evidence_summary: str = "",
 ) -> str:
     """用检索到的文档 + 可选多轮历史生成最终答案（非流式）"""
     context_docs = prepared_context_docs or prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
@@ -266,6 +312,7 @@ def _generate_answer(
         context=context,
         question=question,
         history_text=history_text,
+        verified_evidence_summary=verified_evidence_summary,
     )
 
 
@@ -329,6 +376,7 @@ def ask_with_context(
     question: str,
     llm_model: str = LLM_MODEL,
     temperature: float = TEMPERATURE,
+    force_agent: bool | None = None,
 ):
     """
     带多轮对话上下文的问答：
@@ -343,8 +391,44 @@ def ask_with_context(
     if standalone_q != question:
         print(f'🔄 改写追问: "{standalone_q}"')
 
+    current_settings = _get_settings()
+    use_agentic = _should_use_agentic(standalone_q, current_settings, force_agent=force_agent)
+
     retrieve_start = timer.start_stage()
-    docs, route = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
+    agent_trace: dict[str, Any] | None = None
+    verified_evidence_summary = ""
+    if use_agentic:
+        router = RetrievalRouter(
+            settings=current_settings,
+            llm_factory=_get_llm,
+            hyde_retrieve_fn=_retrieve_with_hyde,
+            multi_query_retrieve_fn=_retrieve_multi_query,
+            apply_rerank_fn=apply_rerank,
+            embedding_device_fn=_get_embedding_device,
+        )
+        source_hints = mentioned_source_files(standalone_q, hybrid, current_settings)
+        agent_state = run_agentic_rag(
+            question=question,
+            standalone_question=standalone_q,
+            task_type=_classify_agentic_task(standalone_q),
+            source_hints=source_hints,
+            hybrid=hybrid,
+            router=router,
+            planner_llm=_create_llm(current_settings.agent_planner_model, temperature),
+            verifier_llm=_create_llm(
+                current_settings.agent_verifier_model,
+                current_settings.agent_verifier_temperature,
+            ),
+            llm_model=llm_model,
+            temperature=temperature,
+            max_repair_rounds=current_settings.agent_max_repair_rounds,
+        )
+        docs = list(agent_state.get("final_docs") or [])
+        route = str(agent_state.get("route") or "agentic")
+        agent_trace = agent_state.get("agent_trace") or {}
+        verified_evidence_summary = str(agent_state.get("verified_summary") or "")
+    else:
+        docs, route = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
     retrieve_elapsed = timer.elapsed_since(retrieve_start)
 
     if not docs:
@@ -355,6 +439,7 @@ def ask_with_context(
             llm_model=llm_model,
             docs=[],
             elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
+            agent_trace=agent_trace,
         )
         return "❌ 未找到相关内容", []
 
@@ -369,6 +454,7 @@ def ask_with_context(
         temperature=temperature,
         hybrid=hybrid,
         prepared_context_docs=context_docs,
+        verified_evidence_summary=verified_evidence_summary,
     )
     generate_elapsed = timer.elapsed_since(generate_start)
     _write_query_log(
@@ -379,6 +465,7 @@ def ask_with_context(
         docs=docs,
         elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, generate_elapsed),
         context_stats=build_context_stats(docs, context_docs),
+        agent_trace=agent_trace,
     )
     return answer, docs
 
