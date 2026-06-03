@@ -58,6 +58,13 @@ class RagSettings:
     vision_visual_density_threshold: float = 0.35
     vision_max_pages_per_doc: int = 20
     vision_force_pages: dict[str, list[int]] = field(default_factory=dict)
+    enable_agentic_query: bool = False
+    agent_auto_for_complex: bool = True
+    agent_max_repair_rounds: int = 1
+    agent_planner_model: str = ""
+    agent_verifier_model: str = ""
+    agent_verifier_temperature: float = 0.0
+    agent_debug_trace: bool = False
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "RagSettings":
@@ -126,6 +133,13 @@ class RagSettings:
             vision_visual_density_threshold=float(data.get("vision_visual_density_threshold", 0.35)),
             vision_max_pages_per_doc=int(data.get("vision_max_pages_per_doc", 20)),
             vision_force_pages=_normalize_skip_pages(data.get("vision_force_pages", {})),
+            enable_agentic_query=bool(data.get("enable_agentic_query", False)),
+            agent_auto_for_complex=bool(data.get("agent_auto_for_complex", True)),
+            agent_max_repair_rounds=int(data.get("agent_max_repair_rounds", 1)),
+            agent_planner_model=str(data.get("agent_planner_model") or data.get("llm_model") or ""),
+            agent_verifier_model=str(data.get("agent_verifier_model") or data.get("llm_model") or ""),
+            agent_verifier_temperature=float(data.get("agent_verifier_temperature", 0.0)),
+            agent_debug_trace=bool(data.get("agent_debug_trace", False)),
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -178,6 +192,13 @@ class RagSettings:
             "vision_visual_density_threshold": self.vision_visual_density_threshold,
             "vision_max_pages_per_doc": self.vision_max_pages_per_doc,
             "vision_force_pages": dict(self.vision_force_pages),
+            "enable_agentic_query": self.enable_agentic_query,
+            "agent_auto_for_complex": self.agent_auto_for_complex,
+            "agent_max_repair_rounds": self.agent_max_repair_rounds,
+            "agent_planner_model": self.agent_planner_model,
+            "agent_verifier_model": self.agent_verifier_model,
+            "agent_verifier_temperature": self.agent_verifier_temperature,
+            "agent_debug_trace": self.agent_debug_trace,
         }
 
 

@@ -87,6 +87,15 @@ context_compression_max_sentences: 3
 enable_parent_retrieval: true
 parent_max_chars_per_page: 2500
 
+# ============ Agentic RAG（LangGraph，默认关闭）============
+enable_agentic_query: false
+agent_auto_for_complex: true
+agent_max_repair_rounds: 1
+agent_planner_model: qwen2.5:3b
+agent_verifier_model: qwen2.5:3b
+agent_verifier_temperature: 0.0
+agent_debug_trace: false
+
 # ============ 结构化查询日志（任务9）============
 # 记录每次问答的 route、来源、上下文长度和分阶段耗时，便于后续失败分析。
 enable_query_logging: true

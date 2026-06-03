@@ -47,10 +47,64 @@ class RagSettingsTest(unittest.TestCase):
         self.assertEqual(settings.vision_visual_density_threshold, 0.35)
         self.assertEqual(settings.vision_max_pages_per_doc, 20)
         self.assertEqual(settings.vision_force_pages, {})
+        self.assertFalse(settings.enable_agentic_query)
+        self.assertTrue(settings.agent_auto_for_complex)
+        self.assertEqual(settings.agent_max_repair_rounds, 1)
+        self.assertEqual(settings.agent_planner_model, "qwen2.5:3b")
+        self.assertEqual(settings.agent_verifier_model, "qwen2.5:3b")
+        self.assertEqual(settings.agent_verifier_temperature, 0.0)
+        self.assertFalse(settings.agent_debug_trace)
         self.assertEqual(settings.as_dict()["llm_model"], "qwen2.5:3b")
         self.assertEqual(settings.as_dict()["chunk_strategy"], "recursive_character")
         self.assertEqual(settings.as_dict()["references_policy"], "keep_with_metadata")
         self.assertEqual(settings.as_dict()["vision_model"], "qwen2.5vl:3b")
+        self.assertFalse(settings.as_dict()["enable_agentic_query"])
+        self.assertTrue(settings.as_dict()["agent_auto_for_complex"])
+        self.assertEqual(settings.as_dict()["agent_max_repair_rounds"], 1)
+        self.assertEqual(settings.as_dict()["agent_planner_model"], "qwen2.5:3b")
+        self.assertEqual(settings.as_dict()["agent_verifier_model"], "qwen2.5:3b")
+        self.assertEqual(settings.as_dict()["agent_verifier_temperature"], 0.0)
+        self.assertFalse(settings.as_dict()["agent_debug_trace"])
+
+    def test_from_mapping_applies_agentic_overrides(self):
+        from paper_rag.config import RagSettings
+
+        settings = RagSettings.from_mapping(
+            {
+                "persist_directory": "./chroma_db",
+                "embedding_model": "BAAI/bge-m3",
+                "llm_model": "qwen2.5:3b",
+                "temperature": 0.1,
+                "k": 6,
+                "chunk_size": 500,
+                "chunk_overlap": 100,
+                "separators": ["\n\n", "\n"],
+                "enable_agentic_query": True,
+                "agent_auto_for_complex": False,
+                "agent_max_repair_rounds": 3,
+                "agent_planner_model": "planner-model",
+                "agent_verifier_model": "verifier-model",
+                "agent_verifier_temperature": 0.2,
+                "agent_debug_trace": True,
+            }
+        )
+
+        self.assertTrue(settings.enable_agentic_query)
+        self.assertFalse(settings.agent_auto_for_complex)
+        self.assertEqual(settings.agent_max_repair_rounds, 3)
+        self.assertEqual(settings.agent_planner_model, "planner-model")
+        self.assertEqual(settings.agent_verifier_model, "verifier-model")
+        self.assertEqual(settings.agent_verifier_temperature, 0.2)
+        self.assertTrue(settings.agent_debug_trace)
+
+        settings_dict = settings.as_dict()
+        self.assertTrue(settings_dict["enable_agentic_query"])
+        self.assertFalse(settings_dict["agent_auto_for_complex"])
+        self.assertEqual(settings_dict["agent_max_repair_rounds"], 3)
+        self.assertEqual(settings_dict["agent_planner_model"], "planner-model")
+        self.assertEqual(settings_dict["agent_verifier_model"], "verifier-model")
+        self.assertEqual(settings_dict["agent_verifier_temperature"], 0.2)
+        self.assertTrue(settings_dict["agent_debug_trace"])
 
     def test_from_mapping_normalizes_vision_force_pages(self):
         from paper_rag.config import RagSettings

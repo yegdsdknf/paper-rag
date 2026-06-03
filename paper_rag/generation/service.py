@@ -13,9 +13,16 @@ def build_rag_prompt(
     context: str,
     question: str,
     history_text: str = "",
+    verified_evidence_summary: str = "",
 ) -> str:
     """统一构造 RAG prompt，避免流式和非流式生成各拼一套。"""
-    return history_text + ANSWER_ORDER_INSTRUCTION + "\n" + prompt_template.format(context=context, question=question)
+    verified_summary = verified_evidence_summary.strip()
+    agentic_prefix = f"{verified_summary}\n\n" if verified_summary else ""
+    context_with_agentic = agentic_prefix + context
+    return history_text + ANSWER_ORDER_INSTRUCTION + "\n" + prompt_template.format(
+        context=context_with_agentic,
+        question=question,
+    )
 
 
 def _content_from_response(response: Any) -> str:
@@ -28,6 +35,7 @@ def generate_answer(
     context: str,
     question: str,
     history_text: str = "",
+    verified_evidence_summary: str = "",
 ) -> str:
     if llm is None:
         return LLM_DISCONNECTED_MESSAGE
@@ -37,6 +45,7 @@ def generate_answer(
         context=context,
         question=question,
         history_text=history_text,
+        verified_evidence_summary=verified_evidence_summary,
     )
     return _content_from_response(llm.invoke(full_prompt)).strip()
 
@@ -47,6 +56,7 @@ def stream_answer_tokens(
     context: str,
     question: str,
     history_text: str = "",
+    verified_evidence_summary: str = "",
 ) -> Iterable[str]:
     if llm is None:
         yield LLM_STREAM_DISCONNECTED_MESSAGE
@@ -57,6 +67,7 @@ def stream_answer_tokens(
         context=context,
         question=question,
         history_text=history_text,
+        verified_evidence_summary=verified_evidence_summary,
     )
     for chunk in llm.stream(full_prompt):
         text = _content_from_response(chunk)
