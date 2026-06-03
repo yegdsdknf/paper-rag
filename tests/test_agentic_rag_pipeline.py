@@ -193,9 +193,16 @@ class AgenticRagPipelineTest(unittest.TestCase):
             rag_pipeline._classify_agentic_task("Figure 2 的证据在哪一页？"),
             "figure",
         )
+        self.assertEqual(
+            rag_pipeline._classify_agentic_task("DeepSeek-R1 的 multilingual safety performance 图在哪一页？"),
+            "figure",
+        )
 
-    def test_classify_agentic_task_keeps_non_evidence_figure_question_as_method(self):
-        self.assertEqual(rag_pipeline._classify_agentic_task("Figure 2 是什么？"), "method")
+    def test_classify_agentic_task_uses_figure_for_figure_explanation(self):
+        self.assertEqual(rag_pipeline._classify_agentic_task("Figure 2 是什么？"), "figure")
+
+    def test_classify_agentic_task_does_not_treat_image_word_as_figure(self):
+        self.assertEqual(rag_pipeline._classify_agentic_task("ViT 将图像切成 patch 的证据在哪一页？"), "evidence")
         self.assertEqual(rag_pipeline._classify_agentic_task("介绍图注意力机制"), "method")
 
 

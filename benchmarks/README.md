@@ -6,7 +6,7 @@
 
 | 文件 | 说明 |
 |---|---|
-| `benchmark_v1.jsonl` | 任务文档约定的基准集入口文件，覆盖 25 条样本。 |
+| `benchmark_v1.jsonl` | 任务文档约定的基准集入口文件，覆盖 29 条样本，包含 evidence 与 figure 类型题。 |
 | `holdout_v1.jsonl` | 独立留出评估集，问题文本不与 `benchmark_v1.jsonl` 重复，用于检查检索规则是否过拟合。 |
 | `run_baseline.py` | 基线跑分脚本，读取基准集并输出当前 RAG 系统的回答结果。 |
 | `baseline_results.jsonl` | 基线跑分输出文件，由 `run_baseline.py` 生成。 |
@@ -24,7 +24,7 @@
 | `gold_answer` | 人工标注的标准答案。 |
 | `gold_sources` | 标准证据来源，包含文件名和页码。 |
 | `gold_evidence` | 支撑答案的关键原文片段或关键词。 |
-| `task_type` | 任务类型，包括 `definition`、`compare`、`method`、`experiment`、`detail`、`summary`、`followup`、`evidence`。 |
+| `task_type` | 任务类型，包括 `definition`、`compare`、`method`、`experiment`、`detail`、`summary`、`followup`、`evidence`、`figure`。 |
 | `difficulty` | 难度，当前包含 `easy`、`medium`、`hard`。 |
 | `notes` | 标注备注，说明该样本主要测试什么能力。 |
 
@@ -48,6 +48,14 @@ python benchmarks/run_baseline.py --no-generate
 .\.venv\Scripts\python.exe benchmarks/run_baseline.py
 ```
 
+运行 Agentic RAG 基线：
+
+```powershell
+.\.venv\Scripts\python.exe benchmarks\run_baseline.py --agent --output benchmarks\agentic_results_qwen2.5_3b.jsonl
+```
+
+Agentic 路径默认关闭，只有传入 `--agent` 或在系统配置/调用入口显式启用时才会使用。结果文件会额外包含 `agent_trace`，用于检查规划目标、证据验证、repair 轮次和最终来源。
+
 运行 holdout 留出集：
 
 ```powershell
@@ -64,6 +72,7 @@ holdout 只用于最终验证，不应用来继续调具体规则。若必须根
 python eval/run_eval.py --input benchmarks/baseline_results_qwen2.5_3b.jsonl --label qwen2_5_3b
 python eval/run_eval.py --input benchmarks/baseline_results_deepseek_r1_7b.jsonl --label deepseek_r1_7b
 python eval/run_eval.py --input benchmarks/holdout_results_qwen2.5_3b.jsonl --label holdout_qwen2_5_3b
+python eval/run_eval.py --input benchmarks/agentic_results_qwen2.5_3b.jsonl --label agentic_qwen2_5_3b
 ```
 
 报告会写入 `eval/reports/`，包含样本数、平均 Recall@5、平均 MRR、来源命中统计、低召回样本清单，以及按题型和难度聚合的结果。
@@ -114,9 +123,10 @@ query_log_path: logs/query_runs.jsonl
 | `route` | 本次使用的检索路线，例如 `mixed`、`mixed_multi_query`、`hyde`。 |
 | `llm_model` / `embedding_device` | 生成模型和向量编码设备，用于区分不同实验环境。 |
 | `index_version` | 当前查询使用的索引版本，优先来自向量库目录下的 `index_manifest.json`。 |
-| `feature_flags` | 当前查询启用的核心增强开关，包括 rerank、query expansion、context compression、parent retrieval。 |
+| `feature_flags` | 当前查询启用的核心增强开关，包括 rerank、query expansion、context compression、parent retrieval 和 `agentic_query`。 |
 | `query_variants` | 预留的 Query Expansion 变体字段，当前日志结构已支持。 |
 | `retrieved_sources` | 命中的来源文件、页码、预览文本和可选 rerank 分数。 |
+| `agent_trace` | Agentic RAG 启用时记录规划、证据验证和 repair 结果；未启用时为空。 |
 | `context` | 生成阶段上下文统计，包括召回片段数、上下文片段数和字符数变化。 |
 | `elapsed` | `rewrite`、`retrieve`、`generate`、`total` 分阶段耗时。 |
 | `error` | LLM 不可用等异常状态；正常问答为 `null`。 |

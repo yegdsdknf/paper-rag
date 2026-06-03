@@ -153,6 +153,23 @@ class RetrievalRouterTest(unittest.TestCase):
         )
         rerank.assert_not_called()
 
+    def test_evidence_question_adds_matching_remote_evidence_page(self):
+        docs = [Document(page_content="gpt3 abstract", metadata={"source": "gpt3.pdf", "page": 0})]
+        router = RetrievalRouter(
+            settings={"enable_query_expansion": False, "enable_rerank": False, "rerank_top_k": 5},
+        )
+
+        routed_docs, strategy = router.route(
+            FakeHybridWithRemoteEvidence({"GPT-3 使用 Transformer 结构的证据在哪一页？": docs}),
+            "GPT-3 使用 Transformer 结构的证据在哪一页？",
+        )
+
+        self.assertEqual(strategy, "mixed")
+        self.assertIn(
+            ("gpt3.pdf", 7),
+            [(doc.metadata["source"], doc.metadata["page"]) for doc in routed_docs[:5]],
+        )
+
     def test_generic_transformer_overview_pins_origin_paper_front_page(self):
         docs = [
             Document(page_content="deepseek appendix", metadata={"source": "deepseekr1.pdf", "page": 78}),

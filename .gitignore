@@ -1,6 +1,8 @@
 venv/
 chroma_db/
+chroma_db_experiments/
 data/
+logs/
 models/
 eval/reports/
 benchmarks/*results*.jsonl

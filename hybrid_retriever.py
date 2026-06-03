@@ -126,7 +126,7 @@ class HybridRetriever:
             except Exception:
                 return -1  # 强制触发 BM25 重建
 
-    def build_bm25_retriever(self) -> BM25Retriever:
+    def build_bm25_retriever(self) -> BM25Retriever | None:
         """从向量库中提取所有文档，构建 BM25 检索器，加入 lazy_load 缓存"""
         current_count = self._get_chroma_doc_count()
         if self.bm25_retriever and current_count == self._bm25_doc_count:
@@ -137,6 +137,10 @@ class HybridRetriever:
             Document(page_content=c, metadata=all_docs["metadatas"][i])
             for i, c in enumerate(all_docs["documents"])
         ]
+        if not documents:
+            self.bm25_retriever = None
+            self._bm25_doc_count = current_count
+            return None
         self.bm25_retriever = BM25Retriever.from_documents(documents=documents, k=self.top_k)
         self._bm25_doc_count = current_count
         return self.bm25_retriever

@@ -33,9 +33,12 @@ def collect_for_goal(
 
     if goal_type == "figure_evidence":
         loader = vision_loader or _load_vision_docs_from_hybrid
-        vision_docs = _filter_by_source_hint(loader(hybrid, source_hint), source_hint)
+        vision_docs = _filter_by_source_hint(loader(hybrid, source_hint), source_hint, fallback_to_all=False)
         if vision_docs:
-            return vision_docs, "agentic_figure"
+            if _is_page_locator_query(query or str(goal.get("claim") or "")):
+                return _deduplicate_docs(vision_docs), "agentic_figure"
+            neighbor_docs = _load_neighbor_text_docs_from_hybrid(hybrid, vision_docs, source_hint)
+            return _deduplicate_docs(vision_docs + neighbor_docs), "agentic_figure"
 
         docs = _route_docs(router, hybrid, query, llm_model, temperature)
         return _filter_by_source_hint(docs, source_hint), "agentic_figure_text_fallback"
@@ -43,6 +46,19 @@ def collect_for_goal(
     route_name = _ROUTES_BY_GOAL_TYPE.get(goal_type, "agentic_method")
     docs = _route_docs(router, hybrid, query, llm_model, temperature)
     return _filter_by_source_hint(docs, source_hint), route_name
+
+
+def _deduplicate_docs(docs: list[Document]) -> list[Document]:
+    seen: set[tuple[str, int]] = set()
+    unique: list[Document] = []
+    for doc in docs:
+        metadata = doc.metadata or {}
+        key = (_doc_source_basename(doc), _to_int(metadata.get("page"), -1))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(doc)
+    return unique
 
 
 def _route_docs(router: Any, hybrid: Any, query: str, llm_model: str, temperature: float) -> list[Document]:
@@ -80,15 +96,67 @@ def _load_vision_docs_from_hybrid(hybrid: Any, source_hint: str) -> list[Documen
             continue
         vision_docs.append(Document(page_content=page_content, metadata=merged_metadata))
 
-    return _filter_by_source_hint(vision_docs, source_hint)
+    return _filter_by_source_hint(vision_docs, source_hint, fallback_to_all=False)
 
 
-def _filter_by_source_hint(docs: list[Document], source_hint: str) -> list[Document]:
+def _load_neighbor_text_docs_from_hybrid(
+    hybrid: Any,
+    vision_docs: list[Document],
+    source_hint: str,
+    max_pages_ahead: int = 2,
+) -> list[Document]:
+    vector_store = getattr(hybrid, "vector_store", None)
+    if vector_store is None or not vision_docs:
+        return []
+
+    wanted: dict[str, set[int]] = {}
+    for doc in vision_docs:
+        source = _doc_source_basename(doc) or _basename(source_hint)
+        page = _to_int((doc.metadata or {}).get("page"), -1)
+        if not source or page < 0:
+            continue
+        wanted.setdefault(source.lower(), set()).update(range(page + 1, page + max_pages_ahead + 1))
+    if not wanted:
+        return []
+
+    try:
+        raw = vector_store.get(include=["documents", "metadatas"])
+    except Exception:
+        return []
+
+    selected: list[Document] = []
+    seen: set[tuple[str, int]] = set()
+    for content, metadata in zip(raw.get("documents") or [], raw.get("metadatas") or []):
+        if not isinstance(metadata, dict):
+            continue
+        if isinstance(content, Document):
+            candidate = Document(page_content=content.page_content, metadata={**content.metadata, **metadata})
+        else:
+            candidate = Document(page_content=str(content), metadata=dict(metadata))
+        if _is_vision_doc(candidate):
+            continue
+        source = _doc_source_basename(candidate).lower()
+        page = _to_int((candidate.metadata or {}).get("page"), -1)
+        if page not in wanted.get(source, set()):
+            continue
+        if source_hint and not _matches_source_hint(candidate, source_hint):
+            continue
+        key = (source, page)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(candidate)
+    return selected
+
+
+def _filter_by_source_hint(docs: list[Document], source_hint: str, fallback_to_all: bool = True) -> list[Document]:
     if not source_hint:
         return list(docs)
 
     filtered = [doc for doc in docs if _matches_source_hint(doc, source_hint)]
-    return filtered or list(docs)
+    if filtered or not fallback_to_all:
+        return filtered
+    return list(docs)
 
 
 def _matches_source_hint(doc: Document, source_hint: str) -> bool:
@@ -104,6 +172,28 @@ def _matches_source_hint(doc: Document, source_hint: str) -> bool:
         _basename(metadata.get("source_file")),
     ]
     return any(hint in str(candidate or "").replace("\\", "/").lower() for candidate in candidates)
+
+
+def _doc_source_basename(doc: Document) -> str:
+    metadata = doc.metadata or {}
+    return _basename(metadata.get("source") or metadata.get("source_file"))
+
+
+def _is_vision_doc(doc: Document) -> bool:
+    metadata = doc.metadata or {}
+    return metadata.get("paper_region") == "vision" or metadata.get("chunk_strategy") == "vision_summary"
+
+
+def _is_page_locator_query(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return any(signal in lowered for signal in ["在哪一页", "哪一页", "页码", "which page", "page number"])
+
+
+def _to_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _basename(value: Any) -> str:

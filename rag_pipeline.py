@@ -9,6 +9,7 @@ except ImportError:
     torch = None
 
 import os
+import re
 from typing import Any
 
 # 基准评估默认只使用本地模型文件，避免 transformers 导入后启动联网元数据查询。
@@ -184,9 +185,12 @@ def _classify_agentic_task(question: str) -> str:
     if is_comparison_question(question):
         return "compare"
     q_lower = question.lower()
-    figure_signals = ["figure", "图", "图表", "图片", "示意图"]
+    figure_signals = ["figure", "fig.", "图表", "图片", "示意图", "图中", "图里"]
+    has_numbered_figure = re.search(r"(?:图|figure)\s*\d+", q_lower) is not None
+    has_figure_signal = has_numbered_figure or any(signal in q_lower for signal in figure_signals)
     is_evidence = is_evidence_question(question)
-    if is_evidence and any(signal in q_lower for signal in figure_signals):
+    has_standalone_figure_evidence = is_evidence and "图" in q_lower and "图像" not in q_lower and "图注意力" not in q_lower
+    if has_figure_signal or has_standalone_figure_evidence:
         return "figure"
     if is_evidence:
         return "evidence"

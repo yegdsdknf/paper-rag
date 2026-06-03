@@ -156,6 +156,44 @@ class AgenticCollectorTest(unittest.TestCase):
         self.assertEqual(["vision c"], [doc.page_content for doc in docs])
         self.assertEqual("paper-b.pdf", docs[0].metadata["source_file"].replace("\\", "/").split("/")[-1])
 
+    def test_figure_loader_appends_same_source_neighbor_text_pages(self):
+        router = FakeRouter([])
+
+        docs, route = collect_for_goal(
+            {"goal_type": "figure_evidence", "claim": "figure", "source_hint": "paper-a.pdf"},
+            hybrid=FakeHybrid(),
+            router=router,
+        )
+
+        self.assertEqual("agentic_figure", route)
+        self.assertEqual(["vision a", "text b"], [doc.page_content for doc in docs])
+        self.assertEqual([4, 5], [int(doc.metadata["page"]) for doc in docs])
+
+    def test_figure_page_locator_keeps_only_vision_page(self):
+        router = FakeRouter([])
+
+        docs, route = collect_for_goal(
+            {"goal_type": "figure_evidence", "claim": "图在哪一页？", "source_hint": "paper-a.pdf"},
+            hybrid=FakeHybrid(),
+            router=router,
+        )
+
+        self.assertEqual("agentic_figure", route)
+        self.assertEqual(["vision a"], [doc.page_content for doc in docs])
+        self.assertEqual([4], [int(doc.metadata["page"]) for doc in docs])
+
+    def test_figure_loader_does_not_return_other_sources_when_hint_misses(self):
+        router = FakeRouter([_doc("router fallback", source="vit.pdf", page=0)])
+
+        docs, route = collect_for_goal(
+            {"goal_type": "figure_evidence", "claim": "ViT patch evidence", "source_hint": "vit.pdf"},
+            hybrid=FakeHybrid(),
+            router=router,
+        )
+
+        self.assertEqual("agentic_figure_text_fallback", route)
+        self.assertEqual(["router fallback"], [doc.page_content for doc in docs])
+
     def test_default_vision_loader_error_falls_back_to_router(self):
         router = FakeRouter([_doc("router fallback")])
 

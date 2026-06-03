@@ -1,6 +1,6 @@
 # 论文知识库问答系统
 
-本项目是一个面向论文 PDF 的本地 RAG 问答系统，支持 PDF 入库、混合检索、HyDE、Query Expansion、Rerank、Parent Retrieval、Context Compression、多轮对话、Streamlit Web 界面、基准评估和结构化查询日志。
+本项目是一个面向论文 PDF 的本地 RAG 问答系统，支持 PDF 入库、混合检索、HyDE、Query Expansion、Rerank、Parent Retrieval、Context Compression、多轮对话、Agentic RAG、Streamlit Web 界面、基准评估和结构化查询日志。
 
 ## 目录概览
 
@@ -13,6 +13,7 @@
 | `hybrid_retriever.py` / `retrieval_router.py` | 混合检索实现和检索路线选择。 |
 | `generation_service.py` / `context_builder.py` | 答案生成、prompt 构造、流式 token 输出和生成阶段上下文构建。 |
 | `context_compression.py` / `parent_retrieval.py` | 上下文压缩和 parent 回溯。 |
+| `paper_rag/agentic/` | Agentic RAG 的规划、证据收集、验证和上下文组装。 |
 | `query_logger.py` / `feedback.py` / `source_utils.py` | 结构化日志、失败样本回流和来源序列化。 |
 | `benchmarks/` | 人工标注基准集和 baseline 脚本。 |
 | `eval/` | 离线评估脚本和指标。 |
@@ -44,6 +45,21 @@
 | 基准集格式检查 | `.\.venv\Scripts\python.exe benchmarks\run_baseline.py --no-generate` |
 | 完整 baseline | `.\.venv\Scripts\python.exe benchmarks\run_baseline.py` |
 | 离线评估 | `.\.venv\Scripts\python.exe eval\run_eval.py --input benchmarks\baseline_results_qwen2.5_3b.jsonl --label qwen2_5_3b` |
+| Agentic benchmark | `.\.venv\Scripts\python.exe benchmarks\run_baseline.py --agent --output benchmarks\agentic_results_qwen2.5_3b.jsonl` |
+| Agentic 离线评估 | `.\.venv\Scripts\python.exe eval\run_eval.py --input benchmarks\agentic_results_qwen2.5_3b.jsonl --label agentic_qwen2_5_3b` |
+
+## Agentic RAG
+
+Agentic RAG 默认关闭，避免影响普通问答路径。可通过 `config.yaml`、CLI/UI 控件、streaming 参数或 benchmark 的 `--agent` 显式启用。启用后系统会先规划证据目标，再收集和验证证据，最后把验证摘要和最终上下文交给原有生成链路。
+
+| 使用入口 | 开启方式 |
+|---|---|
+| 配置默认值 | 在 `config.yaml` 中设置 `enable_agentic_query: true`。 |
+| CLI / Web | 使用界面或命令行提供的 agent 开关。 |
+| 流式 API | 调用 `ask_stream(..., force_agent=True)`。 |
+| Benchmark | `benchmarks\run_baseline.py --agent --output benchmarks\agentic_results_qwen2.5_3b.jsonl`。 |
+
+Agentic 路径会在 benchmark 结果和查询日志中附加 `agent_trace`，用于复盘规划目标、证据验证状态、repair 轮次和最终来源。普通 `ask_with_context` 仍保持 `(answer, docs)` 返回；需要 trace 的批量评估使用 `ask_with_context_trace`。
 
 ## 测试
 
