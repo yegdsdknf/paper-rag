@@ -273,8 +273,11 @@ class RetrievalRouter:
         self.apply_rerank_fn = apply_rerank_fn
         self.embedding_device_fn = embedding_device_fn or (lambda: "cpu")
 
-    def retrieve(self, hybrid: Any, query: str) -> list[Document]:
-        retriever = hybrid.get_retriever(query)
+    def retrieve(self, hybrid: Any, query: str, log_context: str = "") -> list[Document]:
+        try:
+            retriever = hybrid.get_retriever(query, log_context=log_context)
+        except TypeError:
+            retriever = hybrid.get_retriever(query)
         docs = retriever.invoke(query)
         return deduplicate_docs(docs)
 
@@ -284,11 +287,15 @@ class RetrievalRouter:
         question: str,
         llm_model: str,
         temperature: float,
+        log_context: str = "",
     ) -> tuple[list[Document], list[str]]:
         if self.multi_query_retrieve_fn is not None:
-            return self.multi_query_retrieve_fn(hybrid, question, llm_model, temperature)
+            try:
+                return self.multi_query_retrieve_fn(hybrid, question, llm_model, temperature, log_context=log_context)
+            except TypeError:
+                return self.multi_query_retrieve_fn(hybrid, question, llm_model, temperature)
 
-        original_docs = self.retrieve(hybrid, question)
+        original_docs = self.retrieve(hybrid, question, _join_log_context(log_context, "[query original]"))
         if not get_setting(self.settings, "enable_query_expansion", False):
             return original_docs, []
 
@@ -307,13 +314,13 @@ class RetrievalRouter:
         if not variants:
             return original_docs, []
 
-        print("Query variants:")
+        print(f"{_join_log_context(log_context, '[query expansion]')} Query variants:")
         for index, variant in enumerate(variants, 1):
-            print(f"  {index}. {variant}")
+            print(f"  [query variant {index}/{len(variants)}] {variant}")
 
         merged_docs = list(original_docs)
-        for variant in variants:
-            merged_docs.extend(self.retrieve(hybrid, variant))
+        for index, variant in enumerate(variants, 1):
+            merged_docs.extend(self.retrieve(hybrid, variant, _join_log_context(log_context, f"[query variant {index}/{len(variants)}]")))
 
         merged_docs = deduplicate_docs(merged_docs)
         max_multiplier = int(get_setting(self.settings, "query_expansion_max_multiplier", n_variants + 1))
@@ -326,12 +333,14 @@ class RetrievalRouter:
         question: str,
         llm_model: str = "",
         temperature: float = 0.0,
+        log_context: str = "",
     ) -> tuple[list[Document], str]:
         is_comparison = is_comparison_question(question)
         source_files = _source_files_for_question(question, hybrid, self.settings)
         if is_comparison or is_overview_question(question) or is_evidence_question(question) or source_files:
-            print("Using standard mixed retrieval")
-            docs, variants = self.retrieve_multi_query(hybrid, question, llm_model, temperature)
+            prefix = f"{log_context} " if log_context else ""
+            print(f"{prefix}Using standard mixed retrieval")
+            docs, variants = self.retrieve_multi_query(hybrid, question, llm_model, temperature, log_context=log_context)
             if is_evidence_question(question):
                 docs = _filter_docs_to_mentioned_sources(question, docs)
                 source_files = mentioned_source_files(question, hybrid, self.settings)
@@ -363,8 +372,13 @@ class RetrievalRouter:
             strategy = "mixed_multi_query" if variants else "mixed"
             return docs, strategy
 
-        print("Using HyDE retrieval")
+        prefix = f"{log_context} " if log_context else ""
+        print(f"{prefix}Using HyDE retrieval")
         if self.hyde_retrieve_fn is None:
             return [], "hyde"
         docs = self.hyde_retrieve_fn(hybrid, question, llm_model, temperature)
         return docs, "hyde"
+
+
+def _join_log_context(*parts: str) -> str:
+    return " ".join(part for part in parts if part)
