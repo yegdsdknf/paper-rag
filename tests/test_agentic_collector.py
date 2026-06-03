@@ -16,13 +16,14 @@ class FakeRouter:
         self.docs = docs
         self.calls = []
 
-    def route(self, hybrid, query, llm_model="", temperature=0.0):
+    def route(self, hybrid, query, llm_model="", temperature=0.0, **kwargs):
         self.calls.append(
             {
                 "hybrid": hybrid,
                 "query": query,
                 "llm_model": llm_model,
                 "temperature": temperature,
+                **kwargs,
             }
         )
         return list(self.docs), "original_route"
@@ -90,6 +91,7 @@ class AgenticCollectorTest(unittest.TestCase):
         self.assertEqual(["specific query"], [call["query"] for call in router.calls])
         self.assertEqual("qwen", router.calls[0]["llm_model"])
         self.assertEqual(0.2, router.calls[0]["temperature"])
+        self.assertEqual("[agent_collect goal=unknown type=page_evidence]", router.calls[0]["log_context"])
         self.assertEqual(["matched"], [doc.page_content for doc in collected])
 
     def test_page_evidence_falls_back_to_claim_query_when_query_missing(self):

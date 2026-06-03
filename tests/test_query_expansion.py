@@ -1,4 +1,6 @@
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from unittest.mock import patch
 
 from langchain_core.documents import Document
@@ -170,6 +172,39 @@ class QueryExpansionTest(unittest.TestCase):
         self.assertLessEqual(len(captured["docs"]), 2 * 3)
         self.assertEqual(docs, captured["docs"])
         rerank.assert_called_once()
+
+    def test_multi_query_logs_original_and_variant_labels(self):
+        calls = []
+
+        def fake_retrieve(_hybrid, query, log_context=""):
+            calls.append((query, log_context))
+            return [Document(page_content=query, metadata={"source": f"{len(calls)}.pdf", "page": 0})]
+
+        with (
+            patch.dict(
+                rag_pipeline.config,
+                {
+                    "enable_query_expansion": True,
+                    "query_expansion_variants": 2,
+                    "query_expansion_max_multiplier": 3,
+                },
+            ),
+            patch.object(rag_pipeline, "_get_llm", return_value=FakeExpansionLLM()),
+            patch.object(rag_pipeline, "_retrieve", side_effect=fake_retrieve),
+        ):
+            output = StringIO()
+            with redirect_stdout(output):
+                rag_pipeline._retrieve_multi_query(object(), "compare attention query")
+
+        self.assertEqual(
+            calls,
+            [
+                ("compare attention query", "[query original]"),
+                ("self-attention mechanisms in transformer papers", "[query variant 1/2]"),
+                ("自注意力机制在 Transformer 论文中的证据", "[query variant 2/2]"),
+            ],
+        )
+        self.assertIn("[query variant 1/2] self-attention mechanisms in transformer papers", output.getvalue())
 
     def test_evidence_question_uses_multi_query_route(self):
         with (

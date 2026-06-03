@@ -164,6 +164,10 @@ def _deduplicate_docs(docs):
     return deduplicate_docs(docs)
 
 
+def _join_log_context(*parts: str) -> str:
+    return " ".join(part for part in parts if part)
+
+
 def _mentioned_source_files(question: str) -> list[str]:
     return mentioned_source_files(question)
 
@@ -220,9 +224,12 @@ def _should_use_agentic(
     return len(question) >= 80 and any(signal in q_lower for signal in complex_signals)
 
 
-def _retrieve(hybrid: HybridRetriever, query: str) -> list:
+def _retrieve(hybrid: HybridRetriever, query: str, log_context: str = "") -> list:
     """纯检索，不生成答案（已去重）"""
-    retriever = hybrid.get_retriever(query)
+    try:
+        retriever = hybrid.get_retriever(query, log_context=log_context)
+    except TypeError:
+        retriever = hybrid.get_retriever(query)
     docs = retriever.invoke(query)
     return _deduplicate_docs(docs)
 
@@ -232,10 +239,12 @@ def _retrieve_multi_query(
     question: str,
     llm_model: str = LLM_MODEL,
     temperature: float = TEMPERATURE,
+    log_context: str = "",
 ) -> tuple[list, list[str]]:
     """对原始 query 和改写 query 分别召回，合并去重后返回。"""
     current_settings = _get_settings()
-    original_docs = _retrieve(hybrid, question)
+    original_context = _join_log_context(log_context, "[query original]")
+    original_docs = _retrieve(hybrid, question, log_context=original_context)
     if not current_settings.enable_query_expansion:
         return original_docs, []
 
@@ -251,13 +260,14 @@ def _retrieve_multi_query(
     if not variants:
         return original_docs, []
 
-    print("🔎 Query variants:")
+    print(f"🔎 {_join_log_context(log_context, '[query expansion]')} Query variants:")
     for index, variant in enumerate(variants, 1):
-        print(f"  {index}. {variant}")
+        print(f"  [query variant {index}/{len(variants)}] {variant}")
 
     merged_docs = list(original_docs)
-    for variant in variants:
-        merged_docs.extend(_retrieve(hybrid, variant))
+    for index, variant in enumerate(variants, 1):
+        variant_context = _join_log_context(log_context, f"[query variant {index}/{len(variants)}]")
+        merged_docs.extend(_retrieve(hybrid, variant, log_context=variant_context))
 
     merged_docs = _deduplicate_docs(merged_docs)
     max_multiplier = current_settings.query_expansion_max_multiplier

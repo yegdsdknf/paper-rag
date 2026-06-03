@@ -84,6 +84,7 @@ def _collect_node(state: AgenticRagState) -> AgenticRagState:
             router=state.get("_router"),
             llm_model=state.get("llm_model", ""),
             temperature=state.get("temperature", 0.0),
+            repair_round=int(state.get("repair_rounds", 0) or 0),
         )
         goal_id = _goal_id(goal, index)
         collected_docs_by_goal[goal_id] = docs

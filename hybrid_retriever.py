@@ -185,6 +185,27 @@ class HybridRetriever:
         vector_weight = 1.0 - bm25_weight
         return vector_weight, bm25_weight
 
+    @staticmethod
+    def explain_dynamic_weight_reason(query: str) -> str:
+        """给动态权重日志提供简短原因，帮助区分语义题和精确关键词题。"""
+        formula_chars = "√²³ᵀ⁻⁺→∑∏∫∂±="
+        reasons = []
+        if any(c in query for c in formula_chars):
+            reasons.append("公式符号")
+        if re.findall(r'(?<![a-zA-Z])[A-Z]{2,}(?![a-zA-Z])', query):
+            reasons.append("大写缩写")
+        if any(c.isdigit() for c in query):
+            reasons.append("数字")
+        proper_nouns = re.findall(r'(?<![a-zA-Z])[A-Z][a-zA-Z]+(?![a-zA-Z])', query)
+        proper_nouns = [p for p in proper_nouns if p.upper() != p]
+        if proper_nouns and query.strip().startswith(proper_nouns[0]):
+            proper_nouns = proper_nouns[1:]
+        if proper_nouns:
+            reasons.append("专有名词")
+        if reasons:
+            return "精确信号: " + "、".join(reasons)
+        return "语义概念题"
+
     def _get_weights(self, query: str):
         """
         获取动态权重：正则信号（主） + 语义微调（辅）
@@ -201,7 +222,7 @@ class HybridRetriever:
 
         return vec_w, bm25_w
 
-    def get_retriever(self, query: str = None) -> BaseRetriever:
+    def get_retriever(self, query: str = None, log_context: str = "") -> BaseRetriever:
         """
         获取混合检索器
 
@@ -227,9 +248,12 @@ class HybridRetriever:
         # 4. 计算动态权重
         if query:
             weights = self._get_weights(query)
+            reason = self.explain_dynamic_weight_reason(query)
         else:
             weights = [self.default_vector_weight, self.default_bm25_weight]
-        print(f"⚖️  混合检索权重：向量={weights[0]:.1f}, BM25={weights[1]:.1f}")
+            reason = "默认配置"
+        context = f"{log_context} " if log_context else ""
+        print(f"⚖️  {context}混合检索权重：向量={weights[0]:.1f}, BM25={weights[1]:.1f}，原因={reason}")
 
         # 5. 融合为 EnsembleRetriever
         ensemble_retriever = EnsembleRetriever(

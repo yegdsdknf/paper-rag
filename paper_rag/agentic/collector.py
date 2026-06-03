@@ -26,10 +26,12 @@ def collect_for_goal(
     llm_model: str = "",
     temperature: float = 0.0,
     vision_loader: VisionLoader | None = None,
+    repair_round: int = 0,
 ) -> tuple[list[Document], str]:
     goal_type = str(goal.get("goal_type") or "method_overview")
     query = str(goal.get("query") or goal.get("claim") or "").strip()
     source_hint = str(goal.get("source_hint") or "").strip()
+    log_context = _goal_log_context(goal, repair_round)
 
     if goal_type == "figure_evidence":
         loader = vision_loader or _load_vision_docs_from_hybrid
@@ -40,11 +42,11 @@ def collect_for_goal(
             neighbor_docs = _load_neighbor_text_docs_from_hybrid(hybrid, vision_docs, source_hint)
             return _deduplicate_docs(vision_docs + neighbor_docs), "agentic_figure"
 
-        docs = _route_docs(router, hybrid, query, llm_model, temperature)
+        docs = _route_docs(router, hybrid, query, llm_model, temperature, log_context)
         return _filter_by_source_hint(docs, source_hint), "agentic_figure_text_fallback"
 
     route_name = _ROUTES_BY_GOAL_TYPE.get(goal_type, "agentic_method")
-    docs = _route_docs(router, hybrid, query, llm_model, temperature)
+    docs = _route_docs(router, hybrid, query, llm_model, temperature, log_context)
     return _filter_by_source_hint(docs, source_hint), route_name
 
 
@@ -61,9 +63,20 @@ def _deduplicate_docs(docs: list[Document]) -> list[Document]:
     return unique
 
 
-def _route_docs(router: Any, hybrid: Any, query: str, llm_model: str, temperature: float) -> list[Document]:
-    docs, _strategy = router.route(hybrid, query, llm_model=llm_model, temperature=temperature)
+def _route_docs(router: Any, hybrid: Any, query: str, llm_model: str, temperature: float, log_context: str) -> list[Document]:
+    try:
+        docs, _strategy = router.route(hybrid, query, llm_model=llm_model, temperature=temperature, log_context=log_context)
+    except TypeError:
+        docs, _strategy = router.route(hybrid, query, llm_model=llm_model, temperature=temperature)
     return list(docs)
+
+
+def _goal_log_context(goal: EvidenceGoal, repair_round: int) -> str:
+    goal_id = str(goal.get("id") or "unknown").strip() or "unknown"
+    goal_type = str(goal.get("goal_type") or "method_overview").strip() or "method_overview"
+    if repair_round > 0:
+        return f"[agent_repair round={repair_round} goal={goal_id} type={goal_type}]"
+    return f"[agent_collect goal={goal_id} type={goal_type}]"
 
 
 def _load_vision_docs_from_hybrid(hybrid: Any, source_hint: str) -> list[Document]:
