@@ -114,6 +114,7 @@ def _expanded_term_set(seed_terms: set[str]) -> set[str]:
         "corpus": {"corpus", "dataset", "data set"},
         "pre-training": {"pre-training", "pretraining", "pretrain", "objective", "objectives"},
         "text-to-text": {"text-to-text", "text to text"},
+        "architecture": {"architecture", "architectures", "architectural", "transformer", "layer", "layers", "model and architecture", "attention patterns"},
     }
     terms = set(seed_terms)
     for term in list(seed_terms):
@@ -135,6 +136,7 @@ def _evidence_terms(question: str, front_page_text: str) -> set[str]:
         ("corpus", ["语料", "corpus", "dataset", "数据集"]),
         ("pre-training", ["预训练", "pretrain", "pre-training", "objective"]),
         ("text-to-text", ["text-to-text", "统一框架"]),
+        ("architecture", ["架构", "结构", "architecture", "architectures", "architectural", "transformer"]),
     ]
     for term, signals in signal_terms:
         if any(signal in q_lower for signal in signals):
@@ -334,7 +336,8 @@ class RetrievalRouter:
                 docs = _filter_docs_to_mentioned_sources(question, docs)
                 source_files = mentioned_source_files(question, hybrid, self.settings)
                 anchors = load_anchor_docs_by_page(hybrid, source_files, [0])
-                docs = deduplicate_docs(anchors + docs)[:get_setting(self.settings, "rerank_top_k", len(docs))]
+                evidence_docs = get_source_evidence_docs(hybrid, question, source_files)
+                docs = deduplicate_docs(anchors + evidence_docs + docs)[:get_setting(self.settings, "rerank_top_k", len(docs))]
                 strategy = "mixed_multi_query" if variants else "mixed"
                 return docs, strategy
 

@@ -244,6 +244,42 @@ class RetrievalRouterTest(unittest.TestCase):
             [(doc.metadata["source"], doc.metadata["page"]) for doc in routed_docs[:5]],
         )
 
+    def test_known_source_architecture_question_adds_architecture_evidence_page(self):
+        docs = [Document(page_content="gpt3 abstract", metadata={"source": "gpt3.pdf", "page": 0})]
+        router = RetrievalRouter(
+            settings={"enable_query_expansion": False, "enable_rerank": False, "rerank_top_k": 5},
+        )
+
+        routed_docs, _ = router.route(
+            FakeHybridWithRemoteEvidence({"GPT-3 是不是基于 Transformer 结构？": docs}),
+            "GPT-3 是不是基于 Transformer 结构？",
+        )
+
+        self.assertIn(
+            ("gpt3.pdf", 7),
+            [(doc.metadata["source"], doc.metadata["page"]) for doc in routed_docs[:5]],
+        )
+
+    def test_evidence_question_adds_source_evidence_page_before_truncation(self):
+        docs = [
+            Document(page_content="gpt3 abstract", metadata={"source": "gpt3.pdf", "page": 0}),
+            Document(page_content="late gpt noise", metadata={"source": "gpt3.pdf", "page": 33}),
+            Document(page_content="generic transformer", metadata={"source": "t5.pdf", "page": 16}),
+        ]
+        router = RetrievalRouter(
+            settings={"enable_query_expansion": False, "enable_rerank": False, "rerank_top_k": 5},
+        )
+
+        routed_docs, _ = router.route(
+            FakeHybridWithRemoteEvidence({"GPT-3 使用 Transformer 结构的证据在哪一页？": docs}),
+            "GPT-3 使用 Transformer 结构的证据在哪一页？",
+        )
+
+        self.assertIn(
+            ("gpt3.pdf", 7),
+            [(doc.metadata["source"], doc.metadata["page"]) for doc in routed_docs[:5]],
+        )
+
     def test_summary_question_uses_source_front_page_terms_for_remote_evidence(self):
         docs = [Document(page_content="gpt3 abstract", metadata={"source": "gpt3.pdf", "page": 0})]
         router = RetrievalRouter(
