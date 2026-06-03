@@ -14,20 +14,28 @@ from utils.console import ensure_utf8_console
 
 ensure_utf8_console()
 
-def main():
-    if len(sys.argv) > 1:
-        command = sys.argv[1]
+def main(argv=None):
+    args = list(sys.argv[1:] if argv is None else argv)
+    query_default_flags = {"--agent", "--no-agent"}
+    if args:
+        if args[0] in query_default_flags:
+            command = "query"
+            remaining = args
+        else:
+            command = args[0]
+            remaining = args[1:]
     else:
         command = "query"
+        remaining = []
 
     if command == "build":
         print("🏗️  启动论文入库...\n")
         import build_knowledge
-        build_knowledge.main(sys.argv[2:])
+        build_knowledge.main(remaining)
     elif command == "query":
         print("📚 启动问答系统...\n")
         import query
-        query.main()
+        query.main(remaining)
     elif command in ("-h", "--help"):
         print("""用法：
       python main.py build    论文入库（首次运行或新增论文后执行）

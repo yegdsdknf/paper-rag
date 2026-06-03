@@ -3,6 +3,8 @@
 提供命令行交互界面，支持连续对话
 """
 
+import argparse
+
 from rag_pipeline import build_hybrid_retriever, route_question, ask_with_context
 from conversation import ConversationManager
 from utils.config_loader import load_config
@@ -16,7 +18,16 @@ def print_divider():
     print("\n" + "-" * 60)
 
 
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="启动论文知识库交互式问答。")
+    parser.set_defaults(agent=None)
+    parser.add_argument("--agent", dest="agent", action="store_true", help="强制使用 Agentic 查询。")
+    parser.add_argument("--no-agent", dest="agent", action="store_false", help="强制使用普通查询。")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
     print("=" * 60)
     print("📚  论文知识库问答系统".center(58))
     print("=" * 60)
@@ -81,6 +92,7 @@ def main():
                 question,
                 llm_model=selected_model,
                 temperature=config["temperature"],
+                force_agent=args.agent,
             )
             conv.add_turn(question, answer)
             # 打印回答

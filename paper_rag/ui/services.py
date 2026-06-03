@@ -35,13 +35,22 @@ def collect_stream_answer(
     question: str,
     llm_model: str,
     temperature: float,
+    force_agent: bool | None = None,
 ) -> StreamAnswerResult:
     answer = ""
     docs: list[Any] = []
     route = ""
     rewrite = ""
+    stream_kwargs = {"llm_model": llm_model, "temperature": temperature}
+    if force_agent is not None:
+        stream_kwargs["force_agent"] = force_agent
 
-    for event in ask_stream_fn(hybrid, conversation, question, llm_model=llm_model, temperature=temperature):
+    for event in ask_stream_fn(
+        hybrid,
+        conversation,
+        question,
+        **stream_kwargs,
+    ):
         event_type = event["type"]
         if event_type == "rewrite":
             rewrite = event["data"]

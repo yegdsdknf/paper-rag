@@ -336,6 +336,46 @@ def _route_retrieve(
     return router.route(hybrid, question, llm_model, temperature)
 
 
+def _run_agentic_retrieval(
+    hybrid: HybridRetriever,
+    question: str,
+    standalone_question: str,
+    current_settings: RagSettings,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+) -> tuple[list, str, dict[str, Any], str]:
+    router = RetrievalRouter(
+        settings=current_settings,
+        llm_factory=_get_llm,
+        hyde_retrieve_fn=_retrieve_with_hyde,
+        multi_query_retrieve_fn=_retrieve_multi_query,
+        apply_rerank_fn=apply_rerank,
+        embedding_device_fn=_get_embedding_device,
+    )
+    source_hints = mentioned_source_files(standalone_question, hybrid, current_settings)
+    agent_state = run_agentic_rag(
+        question=question,
+        standalone_question=standalone_question,
+        task_type=_classify_agentic_task(standalone_question),
+        source_hints=source_hints,
+        hybrid=hybrid,
+        router=router,
+        planner_llm=_create_llm(current_settings.agent_planner_model, temperature),
+        verifier_llm=_create_llm(
+            current_settings.agent_verifier_model,
+            current_settings.agent_verifier_temperature,
+        ),
+        llm_model=llm_model,
+        temperature=temperature,
+        max_repair_rounds=current_settings.agent_max_repair_rounds,
+    )
+    docs = list(agent_state.get("final_docs") or [])
+    route = str(agent_state.get("route") or "agentic")
+    agent_trace = agent_state.get("agent_trace") or {}
+    verified_evidence_summary = str(agent_state.get("verified_summary") or "")
+    return docs, route, agent_trace, verified_evidence_summary
+
+
 def route_question(
     hybrid: HybridRetriever,
     question: str,
@@ -370,7 +410,7 @@ def ask_with_hyde(
 
 # ── 多轮对话 ──────────────────────────────────────────
 
-def ask_with_context(
+def _ask_with_context_impl(
     hybrid: HybridRetriever,
     conversation,
     question: str,
@@ -398,35 +438,14 @@ def ask_with_context(
     agent_trace: dict[str, Any] | None = None
     verified_evidence_summary = ""
     if use_agentic:
-        router = RetrievalRouter(
-            settings=current_settings,
-            llm_factory=_get_llm,
-            hyde_retrieve_fn=_retrieve_with_hyde,
-            multi_query_retrieve_fn=_retrieve_multi_query,
-            apply_rerank_fn=apply_rerank,
-            embedding_device_fn=_get_embedding_device,
-        )
-        source_hints = mentioned_source_files(standalone_q, hybrid, current_settings)
-        agent_state = run_agentic_rag(
+        docs, route, agent_trace, verified_evidence_summary = _run_agentic_retrieval(
+            hybrid=hybrid,
             question=question,
             standalone_question=standalone_q,
-            task_type=_classify_agentic_task(standalone_q),
-            source_hints=source_hints,
-            hybrid=hybrid,
-            router=router,
-            planner_llm=_create_llm(current_settings.agent_planner_model, temperature),
-            verifier_llm=_create_llm(
-                current_settings.agent_verifier_model,
-                current_settings.agent_verifier_temperature,
-            ),
+            current_settings=current_settings,
             llm_model=llm_model,
             temperature=temperature,
-            max_repair_rounds=current_settings.agent_max_repair_rounds,
         )
-        docs = list(agent_state.get("final_docs") or [])
-        route = str(agent_state.get("route") or "agentic")
-        agent_trace = agent_state.get("agent_trace") or {}
-        verified_evidence_summary = str(agent_state.get("verified_summary") or "")
     else:
         docs, route = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
     retrieve_elapsed = timer.elapsed_since(retrieve_start)
@@ -441,7 +460,7 @@ def ask_with_context(
             elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
             agent_trace=agent_trace,
         )
-        return "❌ 未找到相关内容", []
+        return "❌ 未找到相关内容", [], agent_trace or {}
 
     history_text = conversation.format_history()
     generate_start = timer.start_stage()
@@ -467,7 +486,51 @@ def ask_with_context(
         context_stats=build_context_stats(docs, context_docs),
         agent_trace=agent_trace,
     )
+    return answer, docs, agent_trace or {}
+
+
+def ask_with_context(
+    hybrid: HybridRetriever,
+    conversation,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+    force_agent: bool | None = None,
+):
+    """
+    带多轮对话上下文的问答：
+    1. 用历史改写追问 → 独立可检索的问题
+    2. 检索（对比/概述 → 混合 / 其他 → HyDE）
+    3. 用原始问题 + 检索 + 历史生成连贯回答
+    """
+    answer, docs, _ = _ask_with_context_impl(
+        hybrid=hybrid,
+        conversation=conversation,
+        question=question,
+        llm_model=llm_model,
+        temperature=temperature,
+        force_agent=force_agent,
+    )
     return answer, docs
+
+
+def ask_with_context_trace(
+    hybrid: HybridRetriever,
+    conversation,
+    question: str,
+    llm_model: str = LLM_MODEL,
+    temperature: float = TEMPERATURE,
+    force_agent: bool | None = None,
+) -> tuple[str, list, dict[str, Any]]:
+    """诊断/benchmark 入口：保留原问答行为，并额外返回 agent trace。"""
+    return _ask_with_context_impl(
+        hybrid=hybrid,
+        conversation=conversation,
+        question=question,
+        llm_model=llm_model,
+        temperature=temperature,
+        force_agent=force_agent,
+    )
 
 
 # ── 流式生成（Streamlit Web 调用入口）─────────────────
@@ -478,6 +541,7 @@ def ask_stream(
     question: str,
     llm_model: str = LLM_MODEL,
     temperature: float = TEMPERATURE,
+    force_agent: bool | None = None,
 ):
     """
     一次调用完成全链路：改写追问 → 路由检索 → 流式生成 → 返回来源
@@ -507,8 +571,26 @@ def ask_stream(
     rewrite_elapsed = timer.elapsed_since(rewrite_start)
 
     # Step 2: 路由检索（统一入口）
+    current_settings = _get_settings()
+    use_agentic = _should_use_agentic(standalone_q, current_settings, force_agent=force_agent)
     retrieve_start = timer.start_stage()
-    docs, strategy = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
+    agent_trace: dict[str, Any] | None = None
+    verified_evidence_summary = ""
+    if use_agentic:
+        yield {"type": "agent_status", "data": "正在拆分证据目标..."}
+        docs, strategy, agent_trace, verified_evidence_summary = _run_agentic_retrieval(
+            hybrid=hybrid,
+            question=question,
+            standalone_question=standalone_q,
+            current_settings=current_settings,
+            llm_model=llm_model,
+            temperature=temperature,
+        )
+        yield {"type": "agent_status", "data": "正在校验证据并组装上下文..."}
+        if current_settings.agent_debug_trace:
+            yield {"type": "agent_trace", "data": agent_trace}
+    else:
+        docs, strategy = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
     retrieve_elapsed = timer.elapsed_since(retrieve_start)
     yield {"type": "route", "data": strategy}
     yield {"type": "docs", "data": docs}
@@ -521,6 +603,7 @@ def ask_stream(
             llm_model=llm_model,
             docs=[],
             elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
+            agent_trace=agent_trace,
         )
         yield {"type": "token", "data": "❌ 未找到相关内容"}
         return
@@ -545,6 +628,7 @@ def ask_stream(
                 timer.elapsed_since(generate_start),
             ),
             context_stats=build_context_stats(docs, context_docs),
+            agent_trace=agent_trace,
             error="LLM 模型未连接",
         )
         yield {"type": "token", "data": LLM_STREAM_DISCONNECTED_MESSAGE}
@@ -556,6 +640,7 @@ def ask_stream(
         context=context,
         question=question,
         history_text=history_text,
+        verified_evidence_summary=verified_evidence_summary,
     ):
         yield {"type": "token", "data": text}
 
@@ -571,6 +656,7 @@ def ask_stream(
             timer.elapsed_since(generate_start),
         ),
         context_stats=build_context_stats(docs, context_docs),
+        agent_trace=agent_trace,
     )
 
 

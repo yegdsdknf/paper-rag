@@ -20,6 +20,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 BENCHMARK_PATH = ROOT / "benchmarks" / "benchmark_v1.jsonl"
 DEFAULT_OUTPUT_PATH = ROOT / "benchmarks" / "baseline_results_qwen2.5_3b.jsonl"
+DEFAULT_AGENT_OUTPUT_PATH = ROOT / "benchmarks" / "agentic_results_qwen2.5_3b.jsonl"
 
 
 def _ensure_project_importable() -> None:
@@ -49,8 +50,9 @@ def _make_result(
     elapsed_sec: float,
     error: str | None = None,
     skipped: bool = False,
+    agent_trace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    result = {
         "id": sample["id"],
         "question": sample["question"],
         "history": sample.get("history", []),
@@ -65,6 +67,9 @@ def _make_result(
         "error": error,
         "skipped": skipped,
     }
+    if agent_trace is not None:
+        result["agent_trace"] = agent_trace
+    return result
 
 
 def _run_sample(
@@ -75,6 +80,7 @@ def _run_sample(
     config: dict[str, Any],
     llm_model: str,
     source_serializer: Any,
+    force_agent: bool | None = None,
 ) -> dict[str, Any]:
     start = time.perf_counter()
     try:
@@ -86,19 +92,35 @@ def _run_sample(
         )
         conversation.history = list(sample.get("history", []))
 
-        answer, docs = rag_pipeline.ask_with_context(
-            hybrid,
-            conversation,
-            sample["question"],
-            llm_model=llm_model,
-            temperature=config["temperature"],
-        )
+        ask_with_trace = getattr(rag_pipeline, "ask_with_context_trace", None)
+        agent_trace: dict[str, Any] | None = None
+        ask_kwargs = {
+            "llm_model": llm_model,
+            "temperature": config["temperature"],
+        }
+        if force_agent is not None:
+            ask_kwargs["force_agent"] = force_agent
+        if ask_with_trace is not None:
+            answer, docs, agent_trace = ask_with_trace(
+                hybrid,
+                conversation,
+                sample["question"],
+                **ask_kwargs,
+            )
+        else:
+            answer, docs = rag_pipeline.ask_with_context(
+                hybrid,
+                conversation,
+                sample["question"],
+                **ask_kwargs,
+            )
         elapsed_sec = time.perf_counter() - start
         return _make_result(
             sample,
             predicted_answer=answer,
             retrieved_sources=source_serializer(docs, preview_chars=200),
             elapsed_sec=elapsed_sec,
+            agent_trace=agent_trace,
         )
     except Exception as exc:
         elapsed_sec = time.perf_counter() - start
@@ -117,6 +139,7 @@ def run_baseline(
     limit: int | None = None,
     no_generate: bool = False,
     llm_model: str | None = None,
+    force_agent: bool | None = None,
 ) -> list[dict[str, Any]]:
     samples = load_samples(benchmark_path, limit=limit)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -148,6 +171,7 @@ def run_baseline(
                 config=config,
                 llm_model=selected_model,
                 source_serializer=sources_from_docs,
+                force_agent=force_agent,
             )
             results.append(result)
 
@@ -162,7 +186,7 @@ def run_baseline(
     return results
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Paper RAG baseline benchmark.")
     parser.add_argument(
         "--benchmark",
@@ -173,7 +197,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT_PATH,
+        default=None,
         help="Output JSONL path.",
     )
     parser.add_argument(
@@ -192,17 +216,34 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override the configured LLM model.",
     )
-    return parser.parse_args()
+    parser.set_defaults(agent=None)
+    parser.add_argument(
+        "--agent",
+        dest="agent",
+        action="store_true",
+        help="Force agentic RAG for every benchmark question.",
+    )
+    parser.add_argument(
+        "--no-agent",
+        dest="agent",
+        action="store_false",
+        help="Force standard RAG for every benchmark question.",
+    )
+    args = parser.parse_args(argv)
+    if args.output is None:
+        args.output = DEFAULT_AGENT_OUTPUT_PATH if args.agent is True else DEFAULT_OUTPUT_PATH
+    return args
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
     run_baseline(
         benchmark_path=args.benchmark,
         output_path=args.output,
         limit=args.limit,
         no_generate=args.no_generate,
         llm_model=args.llm_model,
+        force_agent=args.agent,
     )
 
 

@@ -56,6 +56,8 @@ with st.sidebar:
     selected_mode = st.selectbox("LLM 模式", list(model_options.keys()), index=0)
     selected_model = model_options[selected_mode]
     st.session_state.selected_llm_model = selected_model
+    agent_enabled = st.toggle("Agentic 查询", value=False)
+    st.session_state.agent_enabled = agent_enabled
     st.caption(f"📌 {selected_mode} · {selected_model}  |  🧩 {cfg['embedding_model']}  |  k={cfg['k']}")
     try:
         from paper_rag.config import RagSettings
@@ -142,6 +144,7 @@ for msg in st.session_state.messages:
 if q := st.chat_input("💬 输入问题..."):
     conv = st.session_state.conversation
     llm_model = st.session_state.get("selected_llm_model", cfg["llm_model"])
+    agent_enabled = st.session_state.get("agent_enabled", False)
     conv.update_model(llm_model, cfg["temperature"])
 
     st.session_state.messages.append({"role": "user", "content": q})
@@ -155,12 +158,26 @@ if q := st.chat_input("💬 输入问题..."):
             route = ""
 
             placeholder = st.empty()
-            for event in ask_stream(hybrid, conv, q, llm_model=llm_model, temperature=cfg["temperature"]):
+            for event in ask_stream(
+                hybrid,
+                conv,
+                q,
+                llm_model=llm_model,
+                temperature=cfg["temperature"],
+                force_agent=agent_enabled,
+            ):
                 if event["type"] == "rewrite":
                     st.caption(f"🔄 改写追问：_{event['data']}_")
+                elif event["type"] == "agent_status":
+                    st.caption(f"🧭 {event['data']}")
+                elif event["type"] == "agent_trace":
+                    pass
                 elif event["type"] == "route":
                     route = event["data"]
-                    label = "混合检索" if event["data"].startswith("mixed") else "HyDE 增强"
+                    if event["data"].startswith("agentic"):
+                        label = "Agentic 查询"
+                    else:
+                        label = "混合检索" if event["data"].startswith("mixed") else "HyDE 增强"
                     st.caption(f"🔀 检索策略：**{label}**")
                 elif event["type"] == "docs":
                     docs = event["data"]

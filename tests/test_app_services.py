@@ -33,7 +33,7 @@ class AppServicesTest(unittest.TestCase):
             self.assertEqual((Path(tmp) / "a.pdf").read_bytes(), b"pdf-a")
             self.assertEqual((Path(tmp) / "b.pdf").read_bytes(), b"pdf-b")
 
-    def test_collect_stream_answer_returns_answer_docs_route_and_rewrite(self):
+    def test_collect_stream_answer_returns_answer_docs_route_and_rewrite_with_legacy_stream_fn(self):
         docs = [Document(page_content="evidence", metadata={"source": "paper.pdf", "page": 1})]
 
         def fake_ask_stream(hybrid, conversation, question, llm_model, temperature):
@@ -56,6 +56,26 @@ class AppServicesTest(unittest.TestCase):
         self.assertEqual(result.docs, docs)
         self.assertEqual(result.route, "mixed")
         self.assertEqual(result.rewrite, "standalone question")
+
+    def test_collect_stream_answer_forwards_explicit_force_agent(self):
+        calls = []
+
+        def fake_ask_stream(hybrid, conversation, question, llm_model, temperature, force_agent=None):
+            calls.append(force_agent)
+            yield {"type": "token", "data": "answer"}
+
+        result = collect_stream_answer(
+            ask_stream_fn=fake_ask_stream,
+            hybrid=object(),
+            conversation=object(),
+            question="question",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            force_agent=True,
+        )
+
+        self.assertEqual(result.answer, "answer")
+        self.assertEqual(calls, [True])
 
     def test_build_feedback_payload_preserves_fields(self):
         docs = [Document(page_content="evidence", metadata={"source": "paper.pdf", "page": 1})]
