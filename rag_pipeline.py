@@ -24,6 +24,10 @@ from paper_rag.generation.context import build_context_stats, prepare_docs_for_c
 from paper_rag.generation.service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
 from paper_rag.observability.service import write_query_log
 from paper_rag.observability.trace import TraceTimer
+from paper_rag.pipeline.retrieval import (
+    retrieve_documents,
+    retrieve_with_hyde as retrieve_with_hyde_pipeline,
+)
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
     expand_query,
@@ -163,9 +167,7 @@ def _get_compare_anchor_docs(hybrid: HybridRetriever, question: str) -> list[Doc
 
 def _retrieve(hybrid: HybridRetriever, query: str) -> list:
     """纯检索，不生成答案（已去重）"""
-    retriever = hybrid.get_retriever(query)
-    docs = retriever.invoke(query)
-    return _deduplicate_docs(docs)
+    return retrieve_documents(hybrid, query)
 
 
 def _retrieve_multi_query(
@@ -233,27 +235,15 @@ def _retrieve_with_hyde(
     temperature: float = TEMPERATURE,
 ) -> list:
     """HyDE 纯检索，返回去重后的文档列表"""
-    hyde_prompt_txt = load_prompt("hyde_prompt")
-    hyde_prompt = hyde_prompt_txt.format(query=question)
-
-    llm = _get_llm(llm_model, temperature)
-    if llm is None:
-        print("⚠️  LLM 不可用，降级为混合检索")
-        return _retrieve(hybrid, question)
-
-    try:
-        hyde_response = llm.invoke(hyde_prompt)
-        hyde_doc = hyde_response.content if hasattr(hyde_response, "content") else str(hyde_response)
-        print(f"🧠 HyDE 生成假设性文档（{len(hyde_doc)} 字符）")
-    except Exception as e:
-        print(f"⚠️  HyDE 生成失败：{e}，降级为混合检索")
-        return _retrieve(hybrid, question)
-
-    retriever = hybrid.get_retriever(hyde_doc)
-    docs = retriever.invoke(hyde_doc)
-    docs = _deduplicate_docs(docs)
-    print(f"📄 HyDE 检索到 {len(docs)} 个相关文档（去重后）")
-    return docs
+    return retrieve_with_hyde_pipeline(
+        hybrid,
+        question,
+        llm_model,
+        temperature,
+        load_prompt_fn=load_prompt,
+        get_llm_fn=_get_llm,
+        retrieve_fn=_retrieve,
+    )
 
 
 def _generate_answer(
