@@ -489,6 +489,12 @@ Streamlit 来源展示当前主要显示文件名、页码和 `st.text(d.page_co
 
 `context_compression.py` 当前按 query terms 做简单词频命中，优点是可控、速度快，缺点是不能识别句子位置、术语覆盖密度、标题附近上下文等信号。
 
+**实施状态**
+
+| 状态 | 实际改动 | 验证命令 |
+|---|---|---|
+| 已完成 | 将句子评分升级为 term 命中、覆盖率、长度因子和位置微加分的组合；对 vision summary、abstract、table/equation/formula 等结构化证据保守不压缩 | `.\.venv\Scripts\python.exe -m unittest tests.test_context_compression` |
+
 **建议方案**
 
 | 项目 | 建议 |

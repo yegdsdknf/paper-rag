@@ -35,6 +35,28 @@ class ContextCompressionTest(unittest.TestCase):
 
         self.assertEqual(compress_chunk("vision transformer patches", text), text)
 
+    def test_compress_chunk_prefers_dense_concise_evidence_over_long_noise(self):
+        long_noise = (
+            "Optimizer details appear in a very long sentence that mostly lists unrelated implementation notes "
+            "about hardware, logging, checkpoint names, random seeds, preprocessing, appendix references, "
+            "evaluation scripts, and miscellaneous setup without answering the question."
+        )
+        text = f"{long_noise} Adam optimizer settings are used."
+
+        compressed = compress_chunk("optimizer", text, max_sentences=1)
+
+        self.assertEqual(compressed, "Adam optimizer settings are used.")
+
+    def test_compress_chunk_uses_term_coverage_before_position(self):
+        text = (
+            "Attention appears in early background. "
+            "The Transformer uses attention together with positional encoding."
+        )
+
+        compressed = compress_chunk("Transformer attention positional encoding", text, max_sentences=1)
+
+        self.assertEqual(compressed, "The Transformer uses attention together with positional encoding.")
+
     def test_compress_documents_preserves_metadata_and_records_lengths(self):
         docs = [
             Document(
@@ -75,6 +97,40 @@ class ContextCompressionTest(unittest.TestCase):
         self.assertFalse(compressed_docs[0].metadata["context_compressed"])
         self.assertIn("丹麦语", compressed_docs[0].page_content)
         self.assertIn("87.6", compressed_docs[0].page_content)
+
+    def test_compress_documents_preserves_abstract_chunks(self):
+        abstract_text = (
+            "BERT introduces bidirectional encoder representations. "
+            "It uses masked language modeling and next sentence prediction."
+        )
+        docs = [
+            Document(
+                page_content=abstract_text,
+                metadata={"source": "bert.pdf", "page": 0, "paper_region": "abstract"},
+            )
+        ]
+
+        compressed_docs = compress_documents("masked language modeling", docs, max_sentences=1)
+
+        self.assertEqual(compressed_docs[0].page_content, abstract_text)
+        self.assertFalse(compressed_docs[0].metadata["context_compressed"])
+
+    def test_compress_documents_preserves_table_or_formula_chunks(self):
+        table_text = (
+            "Table 2 reports WMT 2014 EN-DE BLEU scores. "
+            "Transformer big reaches 28.4 BLEU with 3.5 days of training."
+        )
+        docs = [
+            Document(
+                page_content=table_text,
+                metadata={"source": "attention.pdf", "page": 7, "block_type": "table"},
+            )
+        ]
+
+        compressed_docs = compress_documents("Transformer BLEU", docs, max_sentences=1)
+
+        self.assertEqual(compressed_docs[0].page_content, table_text)
+        self.assertFalse(compressed_docs[0].metadata["context_compressed"])
 
     def test_generate_answer_compresses_prompt_context_without_mutating_sources(self):
         docs = [
