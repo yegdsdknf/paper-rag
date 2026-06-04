@@ -2,6 +2,14 @@
 
 本项目是一个面向论文 PDF 的本地 RAG 问答系统，支持 PDF 入库、混合检索、HyDE、Query Expansion、Rerank、Parent Retrieval、Context Compression、多轮对话、Streamlit Web 界面、基准评估和结构化查询日志。
 
+## 新手入口
+
+| 你想做什么 | 推荐阅读 |
+|---|---|
+| 第一次运行项目 | [快速开始](docs/getting-started.md) |
+| 遇到启动、模型或检索问题 | [FAQ](docs/FAQ.md) |
+| 理解项目结构和重构路线 | [架构说明](docs/architecture.md) |
+
 ## 目录概览
 
 | 路径 | 说明 |

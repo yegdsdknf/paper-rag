@@ -6,6 +6,8 @@ import os, sys, streamlit as st
 
 from app_services import build_feedback_payload, save_feedback_from_payload, save_uploaded_pdfs
 from app_state import clear_conversation_state
+from paper_rag.ui.errors import format_runtime_error, render_streamlit_error
+from paper_rag.ui.streaming import TokenStreamBuffer
 from utils.console import configure_runtime_env
 
 configure_runtime_env()
@@ -43,12 +45,30 @@ def _init():
 
 
 # ═══════════════════════════════════════════════════════
+# 会话状态与初始化
+# ═══════════════════════════════════════════════════════
+
+if "db_version" not in st.session_state:
+    st.session_state.db_version = 0
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "last_feedback_payload" not in st.session_state:
+    st.session_state.last_feedback_payload = None
+
+try:
+    hybrid, cfg, ask_stream, CM = _init()
+except Exception as e:
+    st.title("📚 论文知识库问答系统")
+    render_streamlit_error(st, format_runtime_error(e))
+    st.stop()
+
+
+# ═══════════════════════════════════════════════════════
 # 侧边栏
 # ═══════════════════════════════════════════════════════
 
 with st.sidebar:
     st.title("📚 论文知识库")
-    _, cfg, _, _ = _init()
     model_options = {
         "默认演示": cfg["llm_model"],
         "reasoning 对照": cfg.get("llm_model_reasoning", cfg["llm_model"]),
@@ -93,18 +113,7 @@ with st.sidebar:
     st.caption("🧠 其他 → HyDE 增强")
     st.caption("⚡ 流式输出")
 
-# ═══════════════════════════════════════════════════════
-# 会话状态
-# ═══════════════════════════════════════════════════════
-
-if "db_version" not in st.session_state:
-    st.session_state.db_version = 0
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "last_feedback_payload" not in st.session_state:
-    st.session_state.last_feedback_payload = None
 if not st.session_state.get("conversation"):
-    _, cfg, _, CM = _init()
     st.session_state.conversation = CM(
         cfg["llm_model"],
         cfg["temperature"],
@@ -118,12 +127,6 @@ if not st.session_state.get("conversation"):
 
 st.title("📚 论文知识库问答系统")
 st.caption("混合检索 + HyDE 增强  |  中英文多轮对话  |  流式输出")
-
-try:
-    hybrid, cfg, ask_stream, _ = _init()
-except Exception as e:
-    st.error(f"初始化失败：{e}")
-    st.stop()
 
 # ── 历史消息 ──
 for msg in st.session_state.messages:
@@ -155,6 +158,7 @@ if q := st.chat_input("💬 输入问题..."):
             route = ""
 
             placeholder = st.empty()
+            stream_buffer = TokenStreamBuffer(max_chunks=8, max_interval_sec=0.08)
             for event in ask_stream(hybrid, conv, q, llm_model=llm_model, temperature=cfg["temperature"]):
                 if event["type"] == "rewrite":
                     st.caption(f"🔄 改写追问：_{event['data']}_")
@@ -167,8 +171,13 @@ if q := st.chat_input("💬 输入问题..."):
                     if docs:
                         st.caption(f"📄 检索到 {len(docs)} 个片段")
                 elif event["type"] == "token":
-                    answer += event["data"]
-                    placeholder.markdown(answer + "▌")
+                    chunk = stream_buffer.append(event["data"])
+                    if chunk:
+                        answer += chunk
+                        placeholder.markdown(answer + "▌")
+            tail = stream_buffer.flush()
+            if tail:
+                answer += tail
             placeholder.markdown(answer)
 
             if docs:
@@ -186,7 +195,12 @@ if q := st.chat_input("💬 输入问题..."):
             })
             st.session_state.last_feedback_payload = build_feedback_payload(q, answer, docs, route, llm_model)
         except Exception as e:
-            st.error(str(e))
+            if "stream_buffer" in locals():
+                tail = stream_buffer.flush()
+                if tail:
+                    answer += tail
+                    placeholder.markdown(answer)
+            render_streamlit_error(st, format_runtime_error(e, cfg))
 
 payload = st.session_state.get("last_feedback_payload")
 if payload:
