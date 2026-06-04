@@ -10,7 +10,7 @@
 
 | 维度 | 当前状态 | 判断 |
 |---|---|---|
-| 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config 等部分实现，根目录保留兼容薄壳和入口文件 | 已进入迁移收口阶段，不是从零开始 |
+| 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config 等实现；`query_expansion`、`reranker`、`context_compression` 已迁入包内，根目录保留兼容薄壳和入口文件 | 已进入最终收口阶段，不是从零开始 |
 | 主链路编排 | `rag_pipeline.py` 仍是主要入口，约 500 行，但已委托到 router、context、generation、observability 模块 | 需要继续收敛为 facade，而非大拆大改 |
 | 配置管理 | `RagSettings.from_mapping()` 已做必填项和类型转换 | 缺少启动时资源检查和友好诊断 |
 | 检索能力 | 已具备混合检索、动态权重、HyDE、Query Expansion、Rerank、Parent Retrieval、Context Compression | 优化重点应转向缓存、阈值校准和回归评估 |
@@ -558,16 +558,23 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 类型 | 示例 | 建议 |
 |---|---|---|
 | 真实入口 | `app.py`、`main.py`、`query.py`、`build_knowledge.py`、`rag_pipeline.py` | 暂时保留 |
-| 兼容薄壳 | `generation_service.py`、`context_builder.py`、`retrieval_router.py`、`source_utils.py` | 分阶段移除 |
-| 仍有真实实现 | `hybrid_retriever.py`、`query_expansion.py`、`reranker.py`、`context_compression.py` | 先迁入包内，再保留薄壳 |
+| 兼容薄壳 | `generation_service.py`、`context_builder.py`、`retrieval_router.py`、`source_utils.py`、`query_expansion.py`、`reranker.py`、`context_compression.py` | 分阶段移除 |
+| 仍有真实实现 | `hybrid_retriever.py` | 继续评估迁入 `paper_rag.retrieval` 的收益和耦合风险 |
+
+**已完成进展**
+
+| 状态 | 内容 | 验证 |
+|---|---|---|
+| 已完成 | 新增 `paper_rag.generation.context_compression`、`paper_rag.retrieval.query_expansion`、`paper_rag.retrieval.reranker`，根目录同名文件降级为兼容薄壳 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
+| 已完成 | `paper_rag.generation.context`、`paper_rag.retrieval.router`、`rag_pipeline.py` 的内部导入切换到 `paper_rag.*` 路径 | `.\.venv\Scripts\python.exe -m unittest tests.test_query_expansion tests.test_context_compression tests.test_reranker tests.test_retrieval_router tests.test_context_builder` |
 
 **建议阶段**
 
 | 阶段 | 动作 | 验收 |
 |---|---|---|
-| 1 | 全局替换内部 import 为 `paper_rag.*` | 单测通过，benchmark schema 检查通过 |
-| 2 | 对薄壳增加 deprecation 注释或测试保护 | 旧入口仍可用 |
-| 3 | 将剩余真实实现迁入 `paper_rag.retrieval`、`paper_rag.generation` | 根目录只剩入口和兼容壳 |
+| 1 | 全局替换内部 import 为 `paper_rag.*` | 已覆盖 generation context、retrieval router 和 `rag_pipeline.py` 的核心辅助导入 |
+| 2 | 对薄壳增加 deprecation 注释或测试保护 | 旧入口仍可用；保留 `reranker.get_reranker` patch 兼容语义 |
+| 3 | 将剩余真实实现迁入 `paper_rag.retrieval`、`paper_rag.generation` | 已迁入 `query_expansion`、`reranker`、`context_compression`；下一步评估 `hybrid_retriever.py` |
 | 4 | 在确认无外部调用后删除薄壳 | README 和 docs 同步更新 |
 
 **风险**

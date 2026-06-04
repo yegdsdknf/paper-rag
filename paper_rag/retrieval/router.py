@@ -12,7 +12,11 @@ from paper_rag.retrieval.source_resolver import (
     normalize_source_signal,
     source_stem_signal,
 )
-from query_expansion import expand_query, filter_query_variants, query_variant_embed_fn_from_hybrid
+from paper_rag.retrieval.query_expansion import (
+    expand_query,
+    filter_query_variants,
+    query_variant_embed_fn_from_hybrid,
+)
 
 
 def deduplicate_docs(docs: list[Document]) -> list[Document]:

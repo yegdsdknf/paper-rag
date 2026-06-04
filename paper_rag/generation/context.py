@@ -4,9 +4,9 @@ from typing import Any
 
 from langchain_core.documents import Document
 
-from context_compression import compress_documents
 from paper_rag.config import get_setting
-from parent_retrieval import expand_parent_pages
+from paper_rag.generation.context_compression import compress_documents
+from paper_rag.generation.parent_retrieval import expand_parent_pages
 
 
 def _compress_docs_for_context(question: str, docs: list[Document], settings: Any) -> list[Document]:

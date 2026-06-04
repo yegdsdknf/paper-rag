@@ -23,13 +23,17 @@ from utils.prompt_loader import load_prompt
 from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
 from paper_rag.config import RagSettings
-from query_expansion import expand_query, filter_query_variants, query_variant_embed_fn_from_hybrid
-from reranker import apply_rerank
-from context_builder import build_context_stats, prepare_docs_for_context
-from generation_service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
+from paper_rag.generation.context import build_context_stats, prepare_docs_for_context
+from paper_rag.generation.service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
 from paper_rag.observability.service import write_query_log
 from paper_rag.observability.trace import TraceTimer
-from retrieval_router import (
+from paper_rag.retrieval.query_expansion import (
+    expand_query,
+    filter_query_variants,
+    query_variant_embed_fn_from_hybrid,
+)
+from paper_rag.retrieval.reranker import apply_rerank
+from paper_rag.retrieval.router import (
     RetrievalRouter,
     deduplicate_docs,
     get_compare_anchor_docs,
