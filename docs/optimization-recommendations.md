@@ -328,7 +328,7 @@ README 已有环境准备和常用命令，但对“第一次运行失败时怎�
 | 项目 | 建议 |
 |---|---|
 | 新增脚本 | `benchmarks/regression_check.py` |
-| 输入 | baseline eval summary、新 eval summary |
+| 输入 | baseline `baseline_results*.jsonl`、新 `baseline_results*.jsonl` |
 | 指标 | `recall@5`、`mrr`、`source_hit_status`、`answer_completeness`、`evidence_coverage` |
 | 容忍度 | 按指标设置不同 tolerance，例如检索指标 0.03，生成指标 0.05 |
 | 输出 | 明确列出回退项、旧值、新值、差值 |
