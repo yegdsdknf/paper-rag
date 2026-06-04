@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 
 ANSWER_ORDER_INSTRUCTION = "请严格按“结论 -> 证据 -> 限制”的顺序回答。"
@@ -50,6 +50,52 @@ def generate_answer(
         history_text=history_text,
     )
     return _content_from_response(llm.invoke(full_prompt)).strip()
+
+
+def generate_answer_from_docs(
+    question: str,
+    docs: list[Any],
+    *,
+    history_text: str = "",
+    llm_model: str,
+    temperature: float,
+    hybrid: Any | None = None,
+    settings: Any | None = None,
+    prepared_context_docs: list[Any] | None = None,
+    prepare_docs_fn: Callable[..., list[Any]] | None = None,
+    format_docs_fn: Callable[[Iterable[Any]], str] = format_docs,
+    load_prompt_fn: Callable[[str], str] | None = None,
+    get_llm_fn: Callable[[str, float], Any | None] | None = None,
+    generate_answer_fn: Callable[..., str] = generate_answer,
+) -> str:
+    """把文档上下文准备、prompt 加载和 LLM 调用收敛到生成服务层。"""
+    if prepare_docs_fn is None:
+        from paper_rag.generation.context import prepare_docs_for_context
+
+        prepare_docs_fn = prepare_docs_for_context
+    if load_prompt_fn is None:
+        from utils.prompt_loader import load_prompt
+
+        load_prompt_fn = load_prompt
+    if get_llm_fn is None:
+        raise ValueError("get_llm_fn is required")
+
+    context_docs = prepared_context_docs or prepare_docs_fn(
+        question,
+        docs,
+        hybrid=hybrid,
+        settings=settings,
+    )
+    context = format_docs_fn(context_docs)
+    prompt_txt = load_prompt_fn("rag_summary_prompt")
+    llm = get_llm_fn(llm_model, temperature)
+    return generate_answer_fn(
+        llm,
+        prompt_template=prompt_txt,
+        context=context,
+        question=question,
+        history_text=history_text,
+    )
 
 
 def stream_answer_tokens(

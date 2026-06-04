@@ -4,13 +4,20 @@ import unittest
 class PackageImportsTest(unittest.TestCase):
     def test_public_package_reexports_current_services(self):
         from paper_rag.config import RagSettings
-        from paper_rag.generation import build_rag_prompt, prepare_docs_for_context
+        from paper_rag.generation import (
+            build_rag_prompt,
+            format_docs,
+            generate_answer_from_docs,
+            prepare_docs_for_context,
+        )
         from paper_rag.observability import TraceTimer, build_query_log_record, source_from_doc, write_query_log
         from paper_rag.retrieval import RetrievalRouter, is_overview_question
         from paper_rag.ui import build_feedback_payload, clear_conversation_state
 
         self.assertTrue(callable(RagSettings.from_mapping))
         self.assertTrue(callable(build_rag_prompt))
+        self.assertTrue(callable(format_docs))
+        self.assertTrue(callable(generate_answer_from_docs))
         self.assertTrue(callable(prepare_docs_for_context))
         self.assertTrue(callable(build_query_log_record))
         self.assertTrue(callable(source_from_doc))

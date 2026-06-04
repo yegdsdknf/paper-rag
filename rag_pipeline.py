@@ -25,6 +25,7 @@ from paper_rag.generation.service import (
     LLM_STREAM_DISCONNECTED_MESSAGE,
     format_docs as format_generation_docs,
     generate_answer,
+    generate_answer_from_docs,
     stream_answer_tokens,
 )
 from paper_rag.observability.service import write_query_log
@@ -221,16 +222,20 @@ def _generate_answer(
     prepared_context_docs: list | None = None,
 ) -> str:
     """用检索到的文档 + 可选多轮历史生成最终答案（非流式）"""
-    context_docs = prepared_context_docs or prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
-    context = _format_docs(context_docs)
-    prompt_txt = load_prompt("rag_summary_prompt")
-    llm = _get_llm(llm_model, temperature)
-    return generate_answer(
-        llm,
-        prompt_template=prompt_txt,
-        context=context,
+    return generate_answer_from_docs(
         question=question,
+        docs=docs,
         history_text=history_text,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+        settings=_get_settings(),
+        prepared_context_docs=prepared_context_docs,
+        prepare_docs_fn=prepare_docs_for_context,
+        format_docs_fn=_format_docs,
+        load_prompt_fn=load_prompt,
+        get_llm_fn=_get_llm,
+        generate_answer_fn=generate_answer,
     )
 
 
