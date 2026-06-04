@@ -602,6 +602,12 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 生成编排 | ask、ask_stream、日志写入 |
 | 演示入口 | `main()` 测试问答 |
 
+**已完成进展**
+
+| 状态 | 内容 | 验证 |
+|---|---|---|
+| 已完成 | 新增 `paper_rag.runtime.models`，将 embedding device 选择和 LLM 连接缓存从 `rag_pipeline.py` 抽出；`rag_pipeline._get_embedding_device` 与 `_get_llm` 保留为兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_runtime_models tests.test_query_logger` |
+
 **建议拆分**
 
 | 目标模块 | 职责 |

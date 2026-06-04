@@ -43,6 +43,7 @@ from paper_rag.retrieval.router import (
     load_anchor_docs_by_page,
     mentioned_source_files,
 )
+from paper_rag.runtime.models import get_cached_llm, select_embedding_device
 
 config = load_config()
 settings = RagSettings.from_mapping(config)
@@ -69,9 +70,7 @@ _llm_cache = {}
 
 def _get_embedding_device() -> str:
     """优先使用 GPU；如果不可用则回退到 CPU。"""
-    if torch is not None and torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
+    return select_embedding_device(torch)
 
 def _get_llm(
     llm_model: str = LLM_MODEL,
@@ -80,23 +79,16 @@ def _get_llm(
     num_predict: int = LLM_NUM_PREDICT,
 ):
     """获取 LLM 实例（按模型名缓存，避免重复创建连接）"""
-    global _llm_cache
-    cache_key = (llm_model, temperature, num_ctx, num_predict)
-    if cache_key not in _llm_cache:
-        llm = create_chat_ollama(
-            model=llm_model,
-            temperature=temperature,
-            num_ctx=num_ctx,
-            num_predict=num_predict,
-        )
-        try:
-            llm.invoke("ping")
-            print(f"✅ LLM 模型 {llm_model} 连接成功")
-            _llm_cache[cache_key] = llm
-        except Exception as e:
-            print(f"❌ LLM 连接失败：{e}")
-            _llm_cache[cache_key] = None
-    return _llm_cache[cache_key]
+    return get_cached_llm(
+        _llm_cache,
+        create_chat_ollama,
+        model=llm_model,
+        temperature=temperature,
+        num_ctx=num_ctx,
+        num_predict=num_predict,
+        on_success=lambda model: print(f"✅ LLM 模型 {model} 连接成功"),
+        on_error=lambda exc: print(f"❌ LLM 连接失败：{exc}"),
+    )
 
 
 def build_hybrid_retriever():
