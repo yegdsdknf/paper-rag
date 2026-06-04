@@ -613,6 +613,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 将 `RetrievalRouter` 依赖注入和路由调用迁入 `paper_rag.pipeline.retrieval.route_retrieve`；`rag_pipeline._route_retrieve` 保留为兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_retrieval tests.test_query_expansion tests.test_rag_rerank_integration tests.test_query_logger` |
 | 已完成 | 将检索片段格式化迁入 `paper_rag.generation.service.format_docs`；`generation_service` 与 `rag_pipeline._format_docs` 保留兼容导出 | `.\.venv\Scripts\python.exe -m unittest tests.test_generation_service tests.test_context_compression tests.test_query_logger` |
 | 已完成 | 将非流式答案生成编排迁入 `paper_rag.generation.service.generate_answer_from_docs`；`rag_pipeline._generate_answer` 保留为注入当前配置的兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_generation_service tests.test_context_compression tests.test_parent_retrieval tests.test_query_logger tests.test_package_imports` |
+| 已完成 | 将流式 token 生成编排迁入 `paper_rag.generation.service.stream_answer_from_docs`；`rag_pipeline.ask_stream` 继续负责事件顺序、日志和 LLM 不可用错误记录 | `.\.venv\Scripts\python.exe -m unittest tests.test_generation_service tests.test_query_logger tests.test_package_imports` |
 
 **建议拆分**
 

@@ -9,6 +9,7 @@ class PackageImportsTest(unittest.TestCase):
             format_docs,
             generate_answer_from_docs,
             prepare_docs_for_context,
+            stream_answer_from_docs,
         )
         from paper_rag.observability import TraceTimer, build_query_log_record, source_from_doc, write_query_log
         from paper_rag.retrieval import RetrievalRouter, is_overview_question
@@ -19,6 +20,7 @@ class PackageImportsTest(unittest.TestCase):
         self.assertTrue(callable(format_docs))
         self.assertTrue(callable(generate_answer_from_docs))
         self.assertTrue(callable(prepare_docs_for_context))
+        self.assertTrue(callable(stream_answer_from_docs))
         self.assertTrue(callable(build_query_log_record))
         self.assertTrue(callable(source_from_doc))
         self.assertTrue(callable(TraceTimer))

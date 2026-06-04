@@ -26,6 +26,7 @@ from paper_rag.generation.service import (
     format_docs as format_generation_docs,
     generate_answer,
     generate_answer_from_docs,
+    stream_answer_from_docs,
     stream_answer_tokens,
 )
 from paper_rag.observability.service import write_query_log
@@ -415,8 +416,6 @@ def ask_stream(
     generate_start = timer.start_stage()
     history_text = conversation.format_history()
     context_docs = prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
-    context = _format_docs(context_docs)
-    prompt_txt = load_prompt("rag_summary_prompt")
     llm = _get_llm(llm_model, temperature)
     if llm is None:
         _write_query_log(
@@ -436,12 +435,20 @@ def ask_stream(
         yield {"type": "token", "data": LLM_STREAM_DISCONNECTED_MESSAGE}
         return
 
-    for text in stream_answer_tokens(
-        llm,
-        prompt_template=prompt_txt,
-        context=context,
+    for text in stream_answer_from_docs(
         question=question,
+        docs=docs,
         history_text=history_text,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+        settings=_get_settings(),
+        prepared_context_docs=context_docs,
+        prepare_docs_fn=prepare_docs_for_context,
+        format_docs_fn=_format_docs,
+        load_prompt_fn=load_prompt,
+        get_llm_fn=lambda _model, _temperature: llm,
+        stream_answer_tokens_fn=stream_answer_tokens,
     ):
         yield {"type": "token", "data": text}
 

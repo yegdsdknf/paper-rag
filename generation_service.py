@@ -6,6 +6,7 @@ from paper_rag.generation.service import (
     format_docs,
     generate_answer,
     generate_answer_from_docs,
+    stream_answer_from_docs,
     stream_answer_tokens,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "format_docs",
     "generate_answer",
     "generate_answer_from_docs",
+    "stream_answer_from_docs",
     "stream_answer_tokens",
 ]

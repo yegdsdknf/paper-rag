@@ -120,3 +120,49 @@ def stream_answer_tokens(
         if text:
             yield text
 
+
+def stream_answer_from_docs(
+    question: str,
+    docs: list[Any],
+    *,
+    history_text: str = "",
+    llm_model: str,
+    temperature: float,
+    hybrid: Any | None = None,
+    settings: Any | None = None,
+    prepared_context_docs: list[Any] | None = None,
+    prepare_docs_fn: Callable[..., list[Any]] | None = None,
+    format_docs_fn: Callable[[Iterable[Any]], str] = format_docs,
+    load_prompt_fn: Callable[[str], str] | None = None,
+    get_llm_fn: Callable[[str, float], Any | None] | None = None,
+    stream_answer_tokens_fn: Callable[..., Iterable[str]] = stream_answer_tokens,
+) -> Iterable[str]:
+    """流式答案生成编排，与非流式路径共享上下文准备边界。"""
+    if prepare_docs_fn is None:
+        from paper_rag.generation.context import prepare_docs_for_context
+
+        prepare_docs_fn = prepare_docs_for_context
+    if load_prompt_fn is None:
+        from utils.prompt_loader import load_prompt
+
+        load_prompt_fn = load_prompt
+    if get_llm_fn is None:
+        raise ValueError("get_llm_fn is required")
+
+    context_docs = prepared_context_docs or prepare_docs_fn(
+        question,
+        docs,
+        hybrid=hybrid,
+        settings=settings,
+    )
+    context = format_docs_fn(context_docs)
+    prompt_txt = load_prompt_fn("rag_summary_prompt")
+    llm = get_llm_fn(llm_model, temperature)
+    yield from stream_answer_tokens_fn(
+        llm,
+        prompt_template=prompt_txt,
+        context=context,
+        question=question,
+        history_text=history_text,
+    )
+
