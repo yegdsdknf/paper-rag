@@ -610,6 +610,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 将 embedding、Chroma、HybridRetriever 的构建逻辑迁入 `paper_rag.runtime.models.build_hybrid_retriever`；`rag_pipeline.build_hybrid_retriever` 保留为兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_runtime_models tests.test_query_logger tests.test_query_expansion tests.test_context_compression` |
 | 已完成 | 新增 `paper_rag.pipeline.retrieval`，迁出基础检索和 HyDE 检索编排；`rag_pipeline._retrieve` 与 `_retrieve_with_hyde` 保留为兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_retrieval tests.test_query_expansion tests.test_rag_rerank_integration tests.test_query_logger` |
 | 已完成 | 将 multi-query 扩展、变体过滤、合并去重和结果截断迁入 `paper_rag.pipeline.retrieval.retrieve_multi_query`；`rag_pipeline._retrieve_multi_query` 保留 trace 兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_retrieval tests.test_query_expansion tests.test_rag_rerank_integration tests.test_query_logger` |
+| 已完成 | 将 `RetrievalRouter` 依赖注入和路由调用迁入 `paper_rag.pipeline.retrieval.route_retrieve`；`rag_pipeline._route_retrieve` 保留为兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_retrieval tests.test_query_expansion tests.test_rag_rerank_integration tests.test_query_logger` |
 
 **建议拆分**
 

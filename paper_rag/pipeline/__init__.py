@@ -3,6 +3,7 @@ from paper_rag.pipeline.retrieval import (
     retrieve_documents,
     retrieve_multi_query,
     retrieve_with_hyde,
+    route_retrieve,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "retrieve_documents",
     "retrieve_multi_query",
     "retrieve_with_hyde",
+    "route_retrieve",
 ]

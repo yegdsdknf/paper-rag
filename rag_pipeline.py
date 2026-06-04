@@ -28,6 +28,7 @@ from paper_rag.pipeline.retrieval import (
     retrieve_documents,
     retrieve_multi_query as retrieve_multi_query_pipeline,
     retrieve_with_hyde as retrieve_with_hyde_pipeline,
+    route_retrieve as route_retrieve_pipeline,
 )
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
@@ -37,7 +38,6 @@ from paper_rag.retrieval.query_expansion import (
 )
 from paper_rag.retrieval.reranker import apply_rerank
 from paper_rag.retrieval.router import (
-    RetrievalRouter,
     deduplicate_docs,
     get_compare_anchor_docs,
     is_comparison_question,
@@ -244,15 +244,18 @@ def _route_retrieve(
     temperature: float = TEMPERATURE,
 ) -> tuple[list, str]:
     """统一路由检索入口（兼容旧调用方，内部委托 retrieval_router）。"""
-    router = RetrievalRouter(
+    return route_retrieve_pipeline(
+        hybrid=hybrid,
+        question=question,
         settings=_get_settings(),
+        llm_model=llm_model,
+        temperature=temperature,
         llm_factory=_get_llm,
         hyde_retrieve_fn=_retrieve_with_hyde,
         multi_query_retrieve_fn=_retrieve_multi_query,
         apply_rerank_fn=apply_rerank,
         embedding_device_fn=_get_embedding_device,
     )
-    return router.route(hybrid, question, llm_model, temperature)
 
 
 def route_question(

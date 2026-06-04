@@ -10,7 +10,7 @@ from paper_rag.retrieval.query_expansion import (
     filter_query_variants,
     query_variant_embed_fn_from_hybrid,
 )
-from paper_rag.retrieval.router import deduplicate_docs
+from paper_rag.retrieval.router import RetrievalRouter, deduplicate_docs
 
 
 @dataclass(frozen=True)
@@ -122,3 +122,28 @@ def retrieve_multi_query(
     merged_docs = deduplicate_docs(merged_docs)
     max_docs = max(len(original_docs) * settings.query_expansion_max_multiplier, len(original_docs))
     return MultiQueryRetrievalResult(docs=merged_docs[:max_docs], variants=variants, rejections=rejections)
+
+
+def route_retrieve(
+    hybrid: Any,
+    question: str,
+    settings: Any,
+    llm_model: str,
+    temperature: float,
+    *,
+    llm_factory: Callable[[str, float], Any] | None = None,
+    hyde_retrieve_fn: Callable[..., list[Document]] | None = None,
+    multi_query_retrieve_fn: Callable[..., tuple[list[Document], list[str]]] | None = None,
+    apply_rerank_fn: Callable[..., list[Document]] | None = None,
+    embedding_device_fn: Callable[[], str] | None = None,
+    router_cls: type = RetrievalRouter,
+) -> tuple[list[Document], str]:
+    router = router_cls(
+        settings=settings,
+        llm_factory=llm_factory,
+        hyde_retrieve_fn=hyde_retrieve_fn,
+        multi_query_retrieve_fn=multi_query_retrieve_fn,
+        apply_rerank_fn=apply_rerank_fn,
+        embedding_device_fn=embedding_device_fn,
+    )
+    return router.route(hybrid, question, llm_model, temperature)

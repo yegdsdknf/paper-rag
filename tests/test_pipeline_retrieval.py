@@ -47,6 +47,18 @@ class FakeSettings:
     query_expansion_max_multiplier = 2
 
 
+class FakeRouter:
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        FakeRouter.instances.append(self)
+
+    def route(self, hybrid, question, llm_model, temperature):
+        self.route_args = (hybrid, question, llm_model, temperature)
+        return ["docs"], "mixed"
+
+
 class PipelineRetrievalTest(unittest.TestCase):
     def test_retrieve_documents_invokes_hybrid_and_deduplicates(self):
         from paper_rag.pipeline.retrieval import retrieve_documents
@@ -178,6 +190,35 @@ class PipelineRetrievalTest(unittest.TestCase):
         self.assertEqual(result.docs, docs)
         self.assertEqual(result.variants, [])
         self.assertEqual(result.rejections, [])
+
+    def test_route_retrieve_wires_router_dependencies_and_delegates_route(self):
+        from paper_rag.pipeline.retrieval import route_retrieve
+
+        FakeRouter.instances = []
+        hybrid = object()
+        settings = FakeSettings()
+        dependencies = {
+            "llm_factory": object(),
+            "hyde_retrieve_fn": object(),
+            "multi_query_retrieve_fn": object(),
+            "apply_rerank_fn": object(),
+            "embedding_device_fn": object(),
+        }
+
+        docs, strategy = route_retrieve(
+            hybrid=hybrid,
+            question="question",
+            settings=settings,
+            llm_model="qwen2.5:3b",
+            temperature=0.2,
+            router_cls=FakeRouter,
+            **dependencies,
+        )
+
+        self.assertEqual((docs, strategy), (["docs"], "mixed"))
+        router = FakeRouter.instances[0]
+        self.assertEqual(router.kwargs, {"settings": settings, **dependencies})
+        self.assertEqual(router.route_args, (hybrid, "question", "qwen2.5:3b", 0.2))
 
 
 if __name__ == "__main__":
