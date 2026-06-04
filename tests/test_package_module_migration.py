@@ -33,11 +33,14 @@ class PackageModuleMigrationTest(unittest.TestCase):
 
     def test_remaining_retrieval_and_context_implementations_have_package_paths(self):
         from paper_rag.generation.context_compression import compress_chunk, compress_documents
+        from paper_rag.retrieval.hybrid import HybridRetriever, SemanticWeightDecider
         from paper_rag.retrieval.query_expansion import expand_query, filter_query_variants
         from paper_rag.retrieval.reranker import Reranker, apply_rerank
 
         self.assertTrue(callable(compress_chunk))
         self.assertTrue(callable(compress_documents))
+        self.assertTrue(callable(HybridRetriever))
+        self.assertTrue(callable(SemanticWeightDecider))
         self.assertTrue(callable(expand_query))
         self.assertTrue(callable(filter_query_variants))
         self.assertTrue(callable(Reranker))
@@ -49,9 +52,12 @@ class PackageModuleMigrationTest(unittest.TestCase):
         package_files = [
             Path("paper_rag/generation/context.py"),
             Path("paper_rag/retrieval/router.py"),
+            Path("rag_pipeline.py"),
+            Path("build_knowledge.py"),
         ]
         forbidden = [
             "from context_compression import",
+            "from hybrid_retriever import",
             "from parent_retrieval import",
             "from query_expansion import",
             "from reranker import",

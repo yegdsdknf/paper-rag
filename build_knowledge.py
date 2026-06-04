@@ -21,7 +21,7 @@ from paper_rag.config import RagSettings
 from paper_rag.indexing import build_index_manifest, collect_vision_summary_docs, save_index_manifest
 from paper_rag.indexing.chunking import split_documents as split_documents_by_strategy
 from paper_rag.indexing.pdf_text import analyze_pdf_text_quality
-from hybrid_retriever import HybridRetriever
+from paper_rag.retrieval.hybrid import HybridRetriever
 
 config = load_config()
 settings = RagSettings.from_mapping(config)

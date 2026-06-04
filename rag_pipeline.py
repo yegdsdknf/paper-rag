@@ -20,13 +20,13 @@ from langchain_core.documents import Document
 from utils.config_loader import load_config
 from utils.ollama_client import create_chat_ollama
 from utils.prompt_loader import load_prompt
-from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
 from paper_rag.config import RagSettings
 from paper_rag.generation.context import build_context_stats, prepare_docs_for_context
 from paper_rag.generation.service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
 from paper_rag.observability.service import write_query_log
 from paper_rag.observability.trace import TraceTimer
+from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
     expand_query,
     filter_query_variants,
