@@ -7,6 +7,7 @@ import os, sys, streamlit as st
 from app_services import build_feedback_payload, save_feedback_from_payload, save_uploaded_pdfs
 from app_state import clear_conversation_state
 from paper_rag.ui.errors import format_runtime_error, render_streamlit_error
+from paper_rag.ui.sources import build_source_view_models
 from paper_rag.ui.streaming import TokenStreamBuffer
 from utils.console import configure_runtime_env
 
@@ -42,6 +43,17 @@ def _init():
     """统一入口：从 session_state 取版本号，传给缓存函数"""
     ver = st.session_state.get("db_version", 0)
     return _init_from_cache(ver)
+
+
+def _render_sources(docs, question: str):
+    for source in build_source_view_models(docs, question):
+        label = source.title
+        if source.score_label:
+            label = f"{label} · {source.score_label}"
+        st.caption(label)
+        st.markdown(source.highlight_html, unsafe_allow_html=True)
+        with st.expander("查看原始片段"):
+            st.text(source.raw_preview)
 
 
 # ═══════════════════════════════════════════════════════
@@ -134,12 +146,7 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         if msg.get("sources"):
             with st.expander("📎 参考来源"):
-                for d in msg["sources"]:
-                    src = d.metadata.get("source", "?")
-                    pg = d.metadata.get("page", "?")
-                    fn = src.replace("\\", "/").split("/")[-1]
-                    st.caption(f"[{fn}] · p{pg}")
-                    st.text(d.page_content[:400])
+                _render_sources(msg["sources"], msg.get("question", msg.get("content", "")))
 
 # ── 输入 + 流式回答 ──
 if q := st.chat_input("💬 输入问题..."):
@@ -182,16 +189,11 @@ if q := st.chat_input("💬 输入问题..."):
 
             if docs:
                 with st.expander("📎 参考来源"):
-                    for d in docs:
-                        src = d.metadata.get("source", "?")
-                        pg = d.metadata.get("page", "?")
-                        fn = src.replace("\\", "/").split("/")[-1]
-                        st.caption(f"[{fn}] · p{pg}")
-                        st.text(d.page_content[:400])
+                    _render_sources(docs, q)
 
             conv.add_turn(q, answer)
             st.session_state.messages.append({
-                "role": "assistant", "content": answer, "sources": docs,
+                "role": "assistant", "content": answer, "sources": docs, "question": q,
             })
             st.session_state.last_feedback_payload = build_feedback_payload(q, answer, docs, route, llm_model)
         except Exception as e:

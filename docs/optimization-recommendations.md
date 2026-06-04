@@ -363,6 +363,12 @@ README 已有环境准备和常用命令，但对“第一次运行失败时怎�
 
 Streamlit 来源展示当前主要显示文件名、页码和 `st.text(d.page_content[:400])`。用户能看到来源，但不容易判断“为什么这段被选中”。
 
+**实施状态**
+
+| 状态 | 实际改动 | 验证命令 |
+|---|---|---|
+| 已完成 | 新增 `paper_rag/ui/sources.py` 生成来源 view model；Streamlit 来源展示改为文件名、页码、rerank 分数、命中高亮片段和原始片段折叠详情 | `.\.venv\Scripts\python.exe -m unittest discover -s tests` |
+
 **建议方案**
 
 | 项目 | 建议 |
