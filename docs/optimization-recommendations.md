@@ -607,6 +607,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 状态 | 内容 | 验证 |
 |---|---|---|
 | 已完成 | 新增 `paper_rag.runtime.models`，将 embedding device 选择和 LLM 连接缓存从 `rag_pipeline.py` 抽出；`rag_pipeline._get_embedding_device` 与 `_get_llm` 保留为兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_runtime_models tests.test_query_logger` |
+| 已完成 | 将 embedding、Chroma、HybridRetriever 的构建逻辑迁入 `paper_rag.runtime.models.build_hybrid_retriever`；`rag_pipeline.build_hybrid_retriever` 保留为兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_runtime_models tests.test_query_logger tests.test_query_expansion tests.test_context_compression` |
 
 **建议拆分**
 

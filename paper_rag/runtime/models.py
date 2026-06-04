@@ -12,6 +12,52 @@ def select_embedding_device(torch_module: Any | None) -> str:
     return "cpu"
 
 
+def build_hybrid_retriever(
+    settings: Any,
+    *,
+    torch_module: Any | None = None,
+    device: str | None = None,
+    embeddings_cls: Callable[..., Any] | None = None,
+    vector_store_cls: Callable[..., Any] | None = None,
+    hybrid_retriever_cls: Callable[..., Any] | None = None,
+) -> Any:
+    if embeddings_cls is None:
+        from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+
+        embeddings_cls = HuggingFaceBgeEmbeddings
+    if vector_store_cls is None:
+        from langchain_chroma import Chroma
+
+        vector_store_cls = Chroma
+    if hybrid_retriever_cls is None:
+        from paper_rag.retrieval.hybrid import HybridRetriever
+
+        hybrid_retriever_cls = HybridRetriever
+
+    selected_device = device or select_embedding_device(torch_module)
+    embeddings = embeddings_cls(
+        model_name=settings.embedding_model,
+        model_kwargs={"device": selected_device, "local_files_only": True},
+        encode_kwargs={"normalize_embeddings": True},
+    )
+    vector_store = vector_store_cls(
+        persist_directory=settings.persist_directory,
+        embedding_function=embeddings,
+        collection_name=settings.collection_name,
+    )
+    return hybrid_retriever_cls(
+        vector_store=vector_store,
+        top_k=settings.k,
+        default_vector_weight=settings.default_vector_weight,
+        default_bm25_weight=settings.default_bm25_weight,
+        embedding_model=embeddings,
+        persist_directory=settings.persist_directory,
+        collection_name=settings.collection_name,
+        chunk_schema_version=settings.chunk_schema_version,
+        index_manifest_filename=settings.index_manifest_filename,
+    )
+
+
 def get_cached_llm(
     cache: MutableMapping[LLMCacheKey, Any | None],
     create_llm_fn: Callable[..., Any],

@@ -26,6 +26,41 @@ class FakeLLM:
         return "pong"
 
 
+class FakeSettings:
+    embedding_model = "fake/bge"
+    persist_directory = "./fake-db"
+    collection_name = "fake_collection"
+    k = 7
+    default_vector_weight = 0.65
+    default_bm25_weight = 0.35
+    chunk_schema_version = "v9"
+    index_manifest_filename = "manifest.json"
+
+
+class FakeEmbeddings:
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        FakeEmbeddings.instances.append(self)
+
+
+class FakeVectorStore:
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        FakeVectorStore.instances.append(self)
+
+
+class FakeHybridRetriever:
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        FakeHybridRetriever.instances.append(self)
+
+
 class RuntimeModelsTest(unittest.TestCase):
     def test_select_embedding_device_prefers_cuda_when_available(self):
         from paper_rag.runtime.models import select_embedding_device
@@ -104,6 +139,55 @@ class RuntimeModelsTest(unittest.TestCase):
         self.assertIsNone(second)
         self.assertEqual(len(created), 1)
         self.assertEqual(errors, ["offline"])
+
+    def test_build_hybrid_retriever_wires_embeddings_vector_store_and_hybrid(self):
+        from paper_rag.runtime.models import build_hybrid_retriever
+
+        FakeEmbeddings.instances = []
+        FakeVectorStore.instances = []
+        FakeHybridRetriever.instances = []
+
+        hybrid = build_hybrid_retriever(
+            FakeSettings(),
+            torch_module=FakeTorch(True),
+            embeddings_cls=FakeEmbeddings,
+            vector_store_cls=FakeVectorStore,
+            hybrid_retriever_cls=FakeHybridRetriever,
+        )
+
+        embeddings = FakeEmbeddings.instances[0]
+        vector_store = FakeVectorStore.instances[0]
+        self.assertIs(hybrid, FakeHybridRetriever.instances[0])
+        self.assertEqual(
+            embeddings.kwargs,
+            {
+                "model_name": "fake/bge",
+                "model_kwargs": {"device": "cuda", "local_files_only": True},
+                "encode_kwargs": {"normalize_embeddings": True},
+            },
+        )
+        self.assertEqual(
+            vector_store.kwargs,
+            {
+                "persist_directory": "./fake-db",
+                "embedding_function": embeddings,
+                "collection_name": "fake_collection",
+            },
+        )
+        self.assertEqual(
+            hybrid.kwargs,
+            {
+                "vector_store": vector_store,
+                "top_k": 7,
+                "default_vector_weight": 0.65,
+                "default_bm25_weight": 0.35,
+                "embedding_model": embeddings,
+                "persist_directory": "./fake-db",
+                "collection_name": "fake_collection",
+                "chunk_schema_version": "v9",
+                "index_manifest_filename": "manifest.json",
+            },
+        )
 
 
 if __name__ == "__main__":

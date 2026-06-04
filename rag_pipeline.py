@@ -15,12 +15,10 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
 
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_core.documents import Document
 from utils.config_loader import load_config
 from utils.ollama_client import create_chat_ollama
 from utils.prompt_loader import load_prompt
-from langchain_chroma import Chroma
 from paper_rag.config import RagSettings
 from paper_rag.generation.context import build_context_stats, prepare_docs_for_context
 from paper_rag.generation.service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
@@ -43,7 +41,11 @@ from paper_rag.retrieval.router import (
     load_anchor_docs_by_page,
     mentioned_source_files,
 )
-from paper_rag.runtime.models import get_cached_llm, select_embedding_device
+from paper_rag.runtime.models import (
+    build_hybrid_retriever as build_runtime_hybrid_retriever,
+    get_cached_llm,
+    select_embedding_device,
+)
 
 config = load_config()
 settings = RagSettings.from_mapping(config)
@@ -95,26 +97,9 @@ def build_hybrid_retriever():
     """构建检索器：从 Chroma 加载向量库 → 包装为 retriever"""
     current_settings = _get_settings()
     device = _get_embedding_device()
-    embeddings = HuggingFaceBgeEmbeddings(
-        model_name=current_settings.embedding_model,
-        model_kwargs={"device": device, "local_files_only": True},
-        encode_kwargs={"normalize_embeddings": True},
-    )
-    vector_store = Chroma(
-        persist_directory=current_settings.persist_directory,
-        embedding_function=embeddings,
-        collection_name=current_settings.collection_name,
-    )
-    hybrid = HybridRetriever(
-        vector_store=vector_store,
-        top_k=current_settings.k,
-        default_vector_weight=current_settings.default_vector_weight,
-        default_bm25_weight=current_settings.default_bm25_weight,
-        embedding_model=embeddings,
-        persist_directory=current_settings.persist_directory,
-        collection_name=current_settings.collection_name,
-        chunk_schema_version=current_settings.chunk_schema_version,
-        index_manifest_filename=current_settings.index_manifest_filename,
+    hybrid = build_runtime_hybrid_retriever(
+        current_settings,
+        device=device,
     )
     print(f"🔀 混合检索器已就绪（向量 + BM25, device={device}）")
     return hybrid
