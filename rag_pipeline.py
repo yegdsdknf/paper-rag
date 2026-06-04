@@ -113,6 +113,10 @@ def build_hybrid_retriever():
         default_vector_weight=current_settings.default_vector_weight,
         default_bm25_weight=current_settings.default_bm25_weight,
         embedding_model=embeddings,
+        persist_directory=current_settings.persist_directory,
+        collection_name=current_settings.collection_name,
+        chunk_schema_version=current_settings.chunk_schema_version,
+        index_manifest_filename=current_settings.index_manifest_filename,
     )
     print(f"🔀 混合检索器已就绪（向量 + BM25, device={device}）")
     return hybrid

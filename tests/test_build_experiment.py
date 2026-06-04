@@ -154,6 +154,39 @@ class BuildExperimentTest(unittest.TestCase):
         self.assertEqual(prepared[0].metadata["quality_flags"], '["vision_generated"]')
         self.assertEqual(chunks[0].metadata["vision_trigger_reason"], ["forced_page", "figure_dense_page"])
 
+    def test_prebuild_bm25_cache_uses_active_settings(self):
+        from unittest.mock import patch
+
+        from build_knowledge import prebuild_bm25_cache
+
+        calls = []
+
+        class FakeHybridRetriever:
+            def __init__(self, **kwargs):
+                calls.append(("init", kwargs))
+
+            def build_bm25_retriever(self):
+                calls.append(("build", None))
+                return object()
+
+        settings = make_settings(
+            persist_directory="./db",
+            collection_name="langchain_demo",
+            chunk_schema_version="v4",
+            index_manifest_filename="index_manifest.json",
+            k=4,
+        )
+
+        with patch("build_knowledge.HybridRetriever", FakeHybridRetriever):
+            prebuild_bm25_cache(vector_store=object(), active_settings=settings)
+
+        self.assertEqual(calls[0][0], "init")
+        self.assertEqual(calls[0][1]["top_k"], 4)
+        self.assertEqual(calls[0][1]["persist_directory"], "./db")
+        self.assertEqual(calls[0][1]["collection_name"], "langchain_demo")
+        self.assertEqual(calls[0][1]["chunk_schema_version"], "v4")
+        self.assertEqual(calls[1], ("build", None))
+
 
 if __name__ == "__main__":
     unittest.main()

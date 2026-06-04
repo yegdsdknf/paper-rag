@@ -21,6 +21,7 @@ from paper_rag.config import RagSettings
 from paper_rag.indexing import build_index_manifest, collect_vision_summary_docs, save_index_manifest
 from paper_rag.indexing.chunking import split_documents as split_documents_by_strategy
 from paper_rag.indexing.pdf_text import analyze_pdf_text_quality
+from hybrid_retriever import HybridRetriever
 
 config = load_config()
 settings = RagSettings.from_mapping(config)
@@ -294,6 +295,25 @@ def reset_collection_if_requested(plan: BuildPlan) -> None:
         raise RuntimeError(f"实验重建失败，未写入向量库：{type(exc).__name__}: {exc}") from exc
 
 
+def prebuild_bm25_cache(vector_store, active_settings: RagSettings) -> None:
+    """入库成功后预构建 BM25 磁盘缓存，减少下一次 Web 启动等待。"""
+    try:
+        hybrid = HybridRetriever(
+            vector_store=vector_store,
+            top_k=active_settings.k,
+            default_vector_weight=active_settings.default_vector_weight,
+            default_bm25_weight=active_settings.default_bm25_weight,
+            persist_directory=active_settings.persist_directory,
+            collection_name=active_settings.collection_name,
+            chunk_schema_version=active_settings.chunk_schema_version,
+            index_manifest_filename=active_settings.index_manifest_filename,
+        )
+        hybrid.build_bm25_retriever()
+        print("✅ BM25 缓存已预构建")
+    except Exception as exc:
+        print(f"⚠️  BM25 缓存预构建失败，将在首次查询时重建：{type(exc).__name__}: {exc}")
+
+
 def main(argv: list[str] | None = None):
     args = parse_build_args(argv)
     plan = resolve_build_plan(settings, args)
@@ -377,6 +397,7 @@ def main(argv: list[str] | None = None):
             vision_stats=vision_stats,
         )
         manifest_file = save_index_manifest(manifest, active_settings)
+        prebuild_bm25_cache(vs, active_settings)
         mark_papers_indexed(new_papers, plan.dedup_record_path)
         print("\n✅ 论文入库完成！")
         print(f"   新增论文：{len(new_papers)} 篇")

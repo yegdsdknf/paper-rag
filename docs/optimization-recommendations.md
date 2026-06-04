@@ -288,7 +288,7 @@ README 已有环境准备和常用命令，但对“第一次运行失败时怎�
 | cache 位置 | 放在 `<persist_directory>/bm25_cache/`，随向量库自然切换 |
 | cache 内容 | 第一版 pickle 项目自己生成的 `BM25Retriever`，同时保存 metadata JSON |
 | 安全边界 | 只从当前 `persist_directory/bm25_cache/` 加载项目生成的 pickle，不接受用户任意指定 cache 路径 |
-| metadata 字段 | `collection_name`、`persist_directory`、`chunk_schema_version`、`chunk_count`、`source_fingerprint`、`created_at`、`cache_format_version`、`langchain_version` 或 `bm25_class` |
+| metadata 字段 | `collection_name`、`persist_directory`、`chunk_schema_version`、`chunk_count`、`top_k`、`source_fingerprint`、`created_at`、`cache_format_version`、`langchain_version` 或 `bm25_class` |
 | source fingerprint | 从 manifest 的来源文件、页数、chunk 数等摘要排序后 hash；不 hash 全量 Chroma 文本 |
 | 构建时机 | `main.py build` 入库结束后预构建；查询时 lazy build 作为兜底 |
 | cache 不匹配 | 输出 WARN 后重建，不阻断启动 |

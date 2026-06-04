@@ -9,6 +9,14 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
+from paper_rag.config import RagSettings
+from paper_rag.indexing.manifest import load_index_manifest
+from paper_rag.retrieval.bm25_cache import (
+    bm25_cache_dir,
+    build_bm25_cache_metadata,
+    load_bm25_cache,
+    save_bm25_cache,
+)
 from utils.config_loader import load_config
 
 config = load_config()
@@ -100,12 +108,20 @@ class HybridRetriever:
         top_k: int = config["k"],
         default_vector_weight: float = config["default_vector_weight"],
         default_bm25_weight: float = config["default_bm25_weight"],
-        embedding_model = None
+        embedding_model = None,
+        persist_directory: str | None = None,
+        collection_name: str | None = None,
+        chunk_schema_version: str = "v1",
+        index_manifest_filename: str = "index_manifest.json",
     ):
         self.vector_store = vector_store
         self.top_k = top_k
         self.default_vector_weight = default_vector_weight
         self.default_bm25_weight = default_bm25_weight
+        self.persist_directory = persist_directory or str(getattr(vector_store, "_persist_directory", ""))
+        self.collection_name = collection_name or str(getattr(vector_store, "_collection_name", "langchain"))
+        self.chunk_schema_version = chunk_schema_version
+        self.index_manifest_filename = index_manifest_filename
         self.bm25_retriever = None      # 缓存
         self._bm25_doc_count = 0        # 过期校验（内部变量）
         if embedding_model is not None:
@@ -127,10 +143,20 @@ class HybridRetriever:
                 return -1  # 强制触发 BM25 重建
 
     def build_bm25_retriever(self) -> BM25Retriever:
-        """从向量库中提取所有文档，构建 BM25 检索器，加入 lazy_load 缓存"""
+        """从向量库中提取所有文档，构建 BM25 检索器，加入进程内和磁盘缓存。"""
         current_count = self._get_chroma_doc_count()
         if self.bm25_retriever and current_count == self._bm25_doc_count:
             return self.bm25_retriever      # 缓存命中
+
+        manifest = self._load_index_manifest()
+        metadata = self._build_bm25_cache_metadata(current_count, manifest)
+        if self.persist_directory:
+            cached = load_bm25_cache(bm25_cache_dir(self.persist_directory), metadata)
+            if cached is not None:
+                self.bm25_retriever = cached
+                self._bm25_doc_count = current_count
+                return self.bm25_retriever
+
         # 重建
         all_docs = self.vector_store.get(include=["documents", "metadatas"])
         documents = [
@@ -139,7 +165,37 @@ class HybridRetriever:
         ]
         self.bm25_retriever = BM25Retriever.from_documents(documents=documents, k=self.top_k)
         self._bm25_doc_count = current_count
+        if self.persist_directory:
+            save_bm25_cache(bm25_cache_dir(self.persist_directory), self.bm25_retriever, metadata)
         return self.bm25_retriever
+
+    def _load_index_manifest(self) -> dict | None:
+        if not self.persist_directory:
+            return None
+        try:
+            settings = RagSettings.from_mapping(
+                {
+                    **config,
+                    "persist_directory": self.persist_directory,
+                    "collection_name": self.collection_name,
+                    "chunk_schema_version": self.chunk_schema_version,
+                    "index_manifest_filename": self.index_manifest_filename,
+                }
+            )
+            return load_index_manifest(settings)
+        except Exception as exc:
+            print(f"[WARN] BM25 cache manifest unavailable; using doc count only: {type(exc).__name__}: {exc}")
+            return None
+
+    def _build_bm25_cache_metadata(self, doc_count: int, manifest: dict | None) -> dict:
+        return build_bm25_cache_metadata(
+            persist_directory=self.persist_directory,
+            collection_name=self.collection_name,
+            chunk_schema_version=self.chunk_schema_version,
+            doc_count=doc_count,
+            top_k=self.top_k,
+            manifest=manifest,
+        )
 
     @staticmethod
     def compute_dynamic_weights(query: str):
