@@ -18,6 +18,17 @@ def build_rag_prompt(
     return history_text + ANSWER_ORDER_INSTRUCTION + "\n" + prompt_template.format(context=context, question=question)
 
 
+def format_docs(docs: Iterable[Any]) -> str:
+    """统一格式化检索片段，供非流式和流式生成共享。"""
+    blocks = []
+    for index, doc in enumerate(docs, 1):
+        source = doc.metadata.get("source", "未知来源")
+        page = doc.metadata.get("page", "?")
+        header = f"[片段{index} | 来源={source} | 页码={page}]"
+        blocks.append(f"{header}\n{doc.page_content}")
+    return "\n\n---\n\n".join(blocks)
+
+
 def _content_from_response(response: Any) -> str:
     return response.content if hasattr(response, "content") else str(response)
 

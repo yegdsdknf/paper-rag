@@ -1,6 +1,8 @@
 import unittest
 
-from generation_service import build_rag_prompt, generate_answer, stream_answer_tokens
+from langchain_core.documents import Document
+
+from generation_service import build_rag_prompt, format_docs, generate_answer, stream_answer_tokens
 
 
 class FakeLLM:
@@ -38,6 +40,21 @@ class GenerationServiceTest(unittest.TestCase):
         self.assertTrue(prompt.startswith("history\n请严格按"))
         self.assertIn("Context: doc context", prompt)
         self.assertIn("Question: What is BERT?", prompt)
+
+    def test_format_docs_includes_source_page_and_separator(self):
+        docs = [
+            Document(page_content="first chunk", metadata={"source": "paper-a.pdf", "page": 3}),
+            Document(page_content="second chunk", metadata={}),
+        ]
+
+        context = format_docs(docs)
+
+        self.assertEqual(
+            context,
+            "[片段1 | 来源=paper-a.pdf | 页码=3]\nfirst chunk"
+            "\n\n---\n\n"
+            "[片段2 | 来源=未知来源 | 页码=?]\nsecond chunk",
+        )
 
     def test_generate_answer_invokes_llm_and_strips_content(self):
         llm = FakeLLM()

@@ -21,7 +21,12 @@ from utils.ollama_client import create_chat_ollama
 from utils.prompt_loader import load_prompt
 from paper_rag.config import RagSettings
 from paper_rag.generation.context import build_context_stats, prepare_docs_for_context
-from paper_rag.generation.service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
+from paper_rag.generation.service import (
+    LLM_STREAM_DISCONNECTED_MESSAGE,
+    format_docs as format_generation_docs,
+    generate_answer,
+    stream_answer_tokens,
+)
 from paper_rag.observability.service import write_query_log
 from paper_rag.observability.trace import TraceTimer
 from paper_rag.pipeline.retrieval import (
@@ -114,13 +119,7 @@ def build_hybrid_retriever():
 
 def _format_docs(docs):
     """统一格式化检索到的文档片段"""
-    blocks = []
-    for i, doc in enumerate(docs, 1):
-        source = doc.metadata.get("source", "未知来源")
-        page = doc.metadata.get("page", "?")
-        header = f"[片段{i} | 来源={source} | 页码={page}]"
-        blocks.append(f"{header}\n{doc.page_content}")
-    return "\n\n---\n\n".join(blocks)
+    return format_generation_docs(docs)
 
 
 def _write_query_log(

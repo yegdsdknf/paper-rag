@@ -3,6 +3,7 @@ from paper_rag.generation.service import (
     LLM_DISCONNECTED_MESSAGE,
     LLM_STREAM_DISCONNECTED_MESSAGE,
     build_rag_prompt,
+    format_docs,
     generate_answer,
     stream_answer_tokens,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "LLM_DISCONNECTED_MESSAGE",
     "LLM_STREAM_DISCONNECTED_MESSAGE",
     "build_rag_prompt",
+    "format_docs",
     "generate_answer",
     "stream_answer_tokens",
 ]
