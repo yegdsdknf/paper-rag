@@ -528,6 +528,12 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 
 `SemanticWeightDecider` 每次初始化会对 precise 和 semantic anchors 做 embedding，用于动态权重微调。这个成本只发生在检索器初始化阶段，不是每次查询成本。
 
+**实施状态**
+
+| 状态 | 实际改动 | 验证命令 |
+|---|---|---|
+| 已完成 | 新增 `data/prototypes/<hash>.npz` 原型缓存；按 embedding model、anchor version、cache format 生成缓存 key；缓存损坏或不匹配时自动重算并覆盖 | `.\.venv\Scripts\python.exe -m unittest tests.test_semantic_prototype_cache` |
+
 **建议方案**
 
 | 项目 | 建议 |

@@ -17,9 +17,45 @@ from paper_rag.retrieval.bm25_cache import (
     load_bm25_cache,
     save_bm25_cache,
 )
+from paper_rag.retrieval.prototype_cache import (
+    DEFAULT_ANCHOR_VERSION,
+    embedding_model_id,
+    load_prototype_cache,
+    save_prototype_cache,
+)
 from utils.config_loader import load_config
 
 config = load_config()
+
+
+PRECISE_ANCHORS = [
+    "BERT 和 ViT 的 Transformer 架构有什么区别",
+    "F1 分数的计算公式",
+    "LoRA 的秩 r 取多少合适",
+    "GPT-4 的参数量是多少",
+    "SQuAD 数据集的基准结果",
+    "混合检索中 BM25 和向量检索的权重分配",
+    "What is the difference between BERT and ViT Transformer architecture",
+    "F1 score formula and calculation steps",
+    "How many parameters does GPT-4 have",
+    "bge-m3 vs text-embedding-3 benchmark comparison",
+]
+
+
+SEMANTIC_ANCHORS = [
+    "什么是注意力机制",
+    "为什么要做预训练",
+    "如何理解知识蒸馏的思想",
+    "Transformer 的核心创新是什么",
+    "大语言模型的工作原理",
+    "对比学习的直觉解释",
+    "RAG 为什么能减少幻觉",
+    "What is attention mechanism in deep learning",
+    "Why do we need pretraining for language models",
+    "What is the core innovation of Transformer architecture",
+    "Explain the intuition behind contrastive learning",
+    "Why does RAG reduce hallucinations in LLMs",
+]
 
 
 class SemanticWeightDecider:
@@ -29,39 +65,32 @@ class SemanticWeightDecider:
     「BERT和ViT的区别」和「What is the difference between BERT and ViT」
     在向量空间中方向相同 → 分到同一个原型 → 同一个权重。
     """
-    def __init__(self, embeddings):
+    def __init__(
+        self,
+        embeddings,
+        prototype_cache_dir: str = "data/prototypes",
+        anchor_version: str = DEFAULT_ANCHOR_VERSION,
+    ):
         self.embeddings = embeddings
-        self._build_prototypes()
+        self.prototype_cache_dir = prototype_cache_dir
+        self.anchor_version = anchor_version
+        self.embedding_model_id = embedding_model_id(embeddings)
+        cached = load_prototype_cache(self.prototype_cache_dir, self.embedding_model_id, self.anchor_version)
+        if cached is not None:
+            self.prototype_precise, self.prototype_semantic = cached
+        else:
+            self._build_prototypes()
+            save_prototype_cache(
+                self.prototype_cache_dir,
+                self.embedding_model_id,
+                self.prototype_precise,
+                self.prototype_semantic,
+                self.anchor_version,
+            )
 
     def _build_prototypes(self):
-        precise_anchors = [
-            "BERT 和 ViT 的 Transformer 架构有什么区别",
-            "F1 分数的计算公式",
-            "LoRA 的秩 r 取多少合适",
-            "GPT-4 的参数量是多少",
-            "SQuAD 数据集的基准结果",
-            "混合检索中 BM25 和向量检索的权重分配",
-            "What is the difference between BERT and ViT Transformer architecture",
-            "F1 score formula and calculation steps",
-            "How many parameters does GPT-4 have",
-            "bge-m3 vs text-embedding-3 benchmark comparison",
-        ]
-        semantic_anchors = [
-            "什么是注意力机制",
-            "为什么要做预训练",
-            "如何理解知识蒸馏的思想",
-            "Transformer 的核心创新是什么",
-            "大语言模型的工作原理",
-            "对比学习的直觉解释",
-            "RAG 为什么能减少幻觉",
-            "What is attention mechanism in deep learning",
-            "Why do we need pretraining for language models",
-            "What is the core innovation of Transformer architecture",
-            "Explain the intuition behind contrastive learning",
-            "Why does RAG reduce hallucinations in LLMs",
-        ]
-        precise_embs = np.array(self.embeddings.embed_documents(precise_anchors))
-        semantic_embs = np.array(self.embeddings.embed_documents(semantic_anchors))
+        precise_embs = np.array(self.embeddings.embed_documents(PRECISE_ANCHORS))
+        semantic_embs = np.array(self.embeddings.embed_documents(SEMANTIC_ANCHORS))
         self.prototype_precise = np.mean(precise_embs, axis=0)
         self.prototype_semantic = np.mean(semantic_embs, axis=0)
 

@@ -11,6 +11,11 @@ from paper_rag.retrieval.router import (
     load_anchor_docs_by_page,
     mentioned_source_files,
 )
+from paper_rag.retrieval.prototype_cache import (
+    load_prototype_cache,
+    prototype_cache_path,
+    save_prototype_cache,
+)
 
 __all__ = [
     "RetrievalRouter",
@@ -23,5 +28,8 @@ __all__ = [
     "is_evidence_question",
     "is_overview_question",
     "load_anchor_docs_by_page",
+    "load_prototype_cache",
     "mentioned_source_files",
+    "prototype_cache_path",
+    "save_prototype_cache",
 ]
