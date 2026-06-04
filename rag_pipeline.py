@@ -23,7 +23,7 @@ from utils.prompt_loader import load_prompt
 from hybrid_retriever import HybridRetriever
 from langchain_chroma import Chroma
 from paper_rag.config import RagSettings
-from query_expansion import expand_query
+from query_expansion import expand_query, filter_query_variants, query_variant_embed_fn_from_hybrid
 from reranker import apply_rerank
 from context_builder import build_context_stats, prepare_docs_for_context
 from generation_service import LLM_STREAM_DISCONNECTED_MESSAGE, generate_answer, stream_answer_tokens
@@ -49,6 +49,8 @@ TEMPERATURE = settings.temperature
 LLM_NUM_CTX = settings.llm_num_ctx
 LLM_NUM_PREDICT = settings.llm_num_predict
 TOP_K_RESULTS = settings.k
+
+_query_expansion_trace: dict[str, list] = {"variants": [], "rejections": []}
 
 
 def _get_settings() -> RagSettings:
@@ -145,6 +147,7 @@ def _write_query_log(
     context_stats: dict | None = None,
     error: str | None = None,
 ) -> None:
+    trace = _query_expansion_trace if route.startswith("mixed") else {"variants": [], "rejections": []}
     write_query_log(
         settings=_get_settings(),
         question=question,
@@ -154,6 +157,8 @@ def _write_query_log(
         docs=docs,
         elapsed=elapsed,
         embedding_device_fn=_get_embedding_device,
+        query_variants=trace["variants"],
+        query_variant_rejections=trace["rejections"],
         context_stats=context_stats,
         error=error,
     )
@@ -190,6 +195,8 @@ def _retrieve_multi_query(
 ) -> tuple[list, list[str]]:
     """对原始 query 和改写 query 分别召回，合并去重后返回。"""
     current_settings = _get_settings()
+    _query_expansion_trace["variants"] = []
+    _query_expansion_trace["rejections"] = []
     original_docs = _retrieve(hybrid, question)
     if not current_settings.enable_query_expansion:
         return original_docs, []
@@ -202,6 +209,24 @@ def _retrieve_multi_query(
     except Exception as exc:
         print(f"⚠️  Query expansion 失败：{type(exc).__name__}: {exc}，仅使用原始 query")
         return original_docs, []
+
+    if not variants:
+        return original_docs, []
+
+    filter_result = filter_query_variants(
+        question,
+        variants,
+        embed_fn=query_variant_embed_fn_from_hybrid(hybrid),
+        enabled=current_settings.enable_query_expansion_similarity_filter,
+        min_similarity=current_settings.query_expansion_min_similarity,
+        max_similarity=current_settings.query_expansion_max_similarity,
+    )
+    variants = filter_result.variants
+    _query_expansion_trace["variants"] = list(variants)
+    _query_expansion_trace["rejections"] = list(filter_result.rejections)
+    for item in filter_result.rejections:
+        variant = item.get("variant") or "<all>"
+        print(f"⚠️  Query variant filtered: {item.get('reason')} · {variant}")
 
     if not variants:
         return original_docs, []

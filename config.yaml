@@ -79,6 +79,10 @@ enable_query_expansion: true
 query_expansion_model: qwen2.5:3b
 query_expansion_variants: 2
 query_expansion_max_multiplier: 3
+# 默认关闭语义相似度过滤；需要 benchmark 校准后再启用。
+enable_query_expansion_similarity_filter: false
+query_expansion_min_similarity: 0.35
+query_expansion_max_similarity: 0.98
 
 # ============ Context Compression（任务6）============
 # 只压缩送入生成 prompt 的上下文，不改变检索结果和前端来源展示。

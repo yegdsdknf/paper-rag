@@ -12,7 +12,7 @@ from paper_rag.retrieval.source_resolver import (
     normalize_source_signal,
     source_stem_signal,
 )
-from query_expansion import expand_query
+from query_expansion import expand_query, filter_query_variants, query_variant_embed_fn_from_hybrid
 
 
 def deduplicate_docs(docs: list[Document]) -> list[Document]:
@@ -309,6 +309,8 @@ class RetrievalRouter:
         self.multi_query_retrieve_fn = multi_query_retrieve_fn
         self.apply_rerank_fn = apply_rerank_fn
         self.embedding_device_fn = embedding_device_fn or (lambda: "cpu")
+        self.last_query_variants: list[str] = []
+        self.last_query_variant_rejections: list[dict[str, Any]] = []
 
     def retrieve(self, hybrid: Any, query: str) -> list[Document]:
         retriever = hybrid.get_retriever(query)
@@ -325,6 +327,8 @@ class RetrievalRouter:
         if self.multi_query_retrieve_fn is not None:
             return self.multi_query_retrieve_fn(hybrid, question, llm_model, temperature)
 
+        self.last_query_variants = []
+        self.last_query_variant_rejections = []
         original_docs = self.retrieve(hybrid, question)
         if not get_setting(self.settings, "enable_query_expansion", False):
             return original_docs, []
@@ -340,6 +344,24 @@ class RetrievalRouter:
         except Exception as exc:
             print(f"Query expansion failed: {type(exc).__name__}: {exc}; using original query only")
             return original_docs, []
+
+        if not variants:
+            return original_docs, []
+
+        filter_result = filter_query_variants(
+            question,
+            variants,
+            embed_fn=query_variant_embed_fn_from_hybrid(hybrid),
+            enabled=bool(get_setting(self.settings, "enable_query_expansion_similarity_filter", False)),
+            min_similarity=float(get_setting(self.settings, "query_expansion_min_similarity", 0.35)),
+            max_similarity=float(get_setting(self.settings, "query_expansion_max_similarity", 0.98)),
+        )
+        variants = filter_result.variants
+        self.last_query_variants = list(variants)
+        self.last_query_variant_rejections = list(filter_result.rejections)
+        for item in filter_result.rejections:
+            variant = item.get("variant") or "<all>"
+            print(f"Query variant filtered: {item.get('reason')} · {variant}")
 
         if not variants:
             return original_docs, []

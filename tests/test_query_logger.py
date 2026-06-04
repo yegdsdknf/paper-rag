@@ -51,12 +51,16 @@ class QueryLoggerTest(unittest.TestCase):
             docs=docs,
             elapsed={"rewrite": 0.01, "retrieve": 0.2, "generate": 1.0, "total": 1.21},
             query_variants=["bert definition"],
+            query_variant_rejections=[
+                {"variant": "bert intro", "reason": "too_similar", "similarity": 0.991}
+            ],
             context_stats={"input_chars": 100, "output_chars": 60},
         )
 
         self.assertEqual(record["question"], "BERT 是什么？")
         self.assertEqual(record["route"], "mixed")
         self.assertEqual(record["query_variants"], ["bert definition"])
+        self.assertEqual(record["query_variant_rejections"][0]["reason"], "too_similar")
         self.assertEqual(record["index_version"], "idx_config123")
         self.assertEqual(
             record["feature_flags"],

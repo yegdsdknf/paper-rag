@@ -22,6 +22,7 @@ def build_query_log_record(
     index_version: str | None = None,
     feature_flags: dict[str, bool] | None = None,
     query_variants: list[str] | None = None,
+    query_variant_rejections: list[dict[str, Any]] | None = None,
     context_stats: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
@@ -35,6 +36,7 @@ def build_query_log_record(
         "index_version": index_version or "unknown",
         "feature_flags": feature_flags or {},
         "query_variants": query_variants or [],
+        "query_variant_rejections": query_variant_rejections or [],
         "retrieved_sources": sources_from_docs(docs, preview_chars=200),
         "context": context_stats or {},
         "elapsed": {key: round(float(value), 4) for key, value in elapsed.items()},

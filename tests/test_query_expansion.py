@@ -4,7 +4,7 @@ from unittest.mock import patch
 from langchain_core.documents import Document
 
 import rag_pipeline
-from query_expansion import expand_query
+from query_expansion import expand_query, filter_query_variants
 
 
 class FakeExpansionLLM:
@@ -78,6 +78,41 @@ class FakeHybrid:
         return Retriever()
 
 
+class FakeEmbeddings:
+    def embed_query(self, text):
+        vectors = {
+            "compare attention query": [1.0, 0.0],
+            "compare attention query duplicate": [0.999, 0.001],
+            "self-attention mechanisms in transformer papers": [0.8, 0.2],
+            "unrelated cooking recipe": [0.0, 1.0],
+        }
+        return vectors[text]
+
+
+class FakeWeightDecider:
+    embeddings = FakeEmbeddings()
+
+
+class FakeHybridWithEmbeddings(FakeHybrid):
+    weight_decider = FakeWeightDecider()
+
+    def get_retriever(self, query):
+        self.queries.append(query)
+
+        class Retriever:
+            def invoke(self, query):
+                return {
+                    "compare attention query": [
+                        Document(page_content="original", metadata={"source": "a.pdf", "page": 1}),
+                    ],
+                    "self-attention mechanisms in transformer papers": [
+                        Document(page_content="variant", metadata={"source": "c.pdf", "page": 3}),
+                    ],
+                }[query]
+
+        return Retriever()
+
+
 class FakeVectorStore:
     def get(self, include=None):
         docs = []
@@ -129,6 +164,69 @@ class QueryExpansionTest(unittest.TestCase):
                 "same model and architecture as GPT-2 transformer layers",
             ],
         )
+
+    def test_filter_query_variants_rejects_too_near_and_too_far_embeddings(self):
+        result = filter_query_variants(
+            "compare attention query",
+            [
+                "compare attention query duplicate",
+                "self-attention mechanisms in transformer papers",
+                "unrelated cooking recipe",
+            ],
+            embed_fn=FakeEmbeddings().embed_query,
+            enabled=True,
+            min_similarity=0.3,
+            max_similarity=0.98,
+        )
+
+        self.assertEqual(result.variants, ["self-attention mechanisms in transformer papers"])
+        self.assertEqual(
+            [(item["variant"], item["reason"]) for item in result.rejections],
+            [
+                ("compare attention query duplicate", "too_similar"),
+                ("unrelated cooking recipe", "too_distant"),
+            ],
+        )
+
+    def test_mixed_route_filters_query_variants_before_retrieval(self):
+        class FilteredExpansionLLM:
+            def invoke(self, prompt):
+                return type(
+                    "Response",
+                    (),
+                    {
+                        "content": """
+1. compare attention query duplicate
+2. self-attention mechanisms in transformer papers
+3. unrelated cooking recipe
+"""
+                    },
+                )()
+
+        fake_hybrid = FakeHybridWithEmbeddings()
+        with (
+            patch.dict(
+                rag_pipeline.config,
+                {
+                    "enable_query_expansion": True,
+                    "query_expansion_variants": 3,
+                    "query_expansion_max_multiplier": 3,
+                    "enable_query_expansion_similarity_filter": True,
+                    "query_expansion_min_similarity": 0.3,
+                    "query_expansion_max_similarity": 0.98,
+                    "enable_rerank": False,
+                },
+            ),
+            patch.object(rag_pipeline, "_get_llm", return_value=FilteredExpansionLLM()),
+        ):
+            docs, variants = rag_pipeline._retrieve_multi_query(fake_hybrid, "compare attention query")
+
+        self.assertEqual(
+            fake_hybrid.queries,
+            ["compare attention query", "self-attention mechanisms in transformer papers"],
+        )
+        self.assertEqual(variants, ["self-attention mechanisms in transformer papers"])
+        self.assertEqual([doc.metadata["source"] for doc in docs], ["a.pdf", "c.pdf"])
 
     def test_mixed_route_uses_multi_query_before_single_rerank(self):
         captured = {}

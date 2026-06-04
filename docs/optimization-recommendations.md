@@ -449,6 +449,12 @@ Streamlit 来源展示当前主要显示文件名、页码和 `st.text(d.page_co
 
 `query_expansion.py` 已有改写 prompt 和解析逻辑，能避免标签行、重复行等低级问题。当前缺口不是“没有 Query Expansion”，而是缺少变体质量控制。
 
+**实施状态**
+
+| 状态 | 实际改动 | 验证命令 |
+|---|---|---|
+| 已完成 | 新增 Query Expansion 相似度过滤器；默认关闭；启用后通过现有 embedding 过滤过近或过远变体，并在 query log 中记录保留变体和过滤原因 | `.\.venv\Scripts\python.exe -m unittest tests.test_query_expansion tests.test_query_logger tests.test_config_settings` |
+
 **建议方案**
 
 | 项目 | 建议 |

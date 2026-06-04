@@ -26,6 +26,8 @@ def write_query_log(
     docs: list[Any],
     elapsed: dict[str, float],
     embedding_device_fn: Callable[[], str],
+    query_variants: list[str] | None = None,
+    query_variant_rejections: list[dict[str, Any]] | None = None,
     context_stats: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> Path | None:
@@ -43,6 +45,8 @@ def write_query_log(
         feature_flags=_feature_flags(settings),
         docs=docs,
         elapsed=elapsed,
+        query_variants=query_variants,
+        query_variant_rejections=query_variant_rejections,
         context_stats=context_stats,
         error=error,
     )

@@ -36,6 +36,9 @@ class RagSettings:
     query_expansion_model: str | None = None
     query_expansion_variants: int = 2
     query_expansion_max_multiplier: int = 3
+    enable_query_expansion_similarity_filter: bool = False
+    query_expansion_min_similarity: float = 0.35
+    query_expansion_max_similarity: float = 0.98
     enable_context_compression: bool = False
     context_compression_max_sentences: int = 3
     enable_parent_retrieval: bool = False
@@ -106,6 +109,9 @@ class RagSettings:
             ),
             query_expansion_variants=int(data.get("query_expansion_variants", 2)),
             query_expansion_max_multiplier=int(data.get("query_expansion_max_multiplier", 3)),
+            enable_query_expansion_similarity_filter=bool(data.get("enable_query_expansion_similarity_filter", False)),
+            query_expansion_min_similarity=float(data.get("query_expansion_min_similarity", 0.35)),
+            query_expansion_max_similarity=float(data.get("query_expansion_max_similarity", 0.98)),
             enable_context_compression=bool(data.get("enable_context_compression", False)),
             context_compression_max_sentences=int(data.get("context_compression_max_sentences", 3)),
             enable_parent_retrieval=bool(data.get("enable_parent_retrieval", False)),
@@ -160,6 +166,9 @@ class RagSettings:
             "query_expansion_model": self.query_expansion_model,
             "query_expansion_variants": self.query_expansion_variants,
             "query_expansion_max_multiplier": self.query_expansion_max_multiplier,
+            "enable_query_expansion_similarity_filter": self.enable_query_expansion_similarity_filter,
+            "query_expansion_min_similarity": self.query_expansion_min_similarity,
+            "query_expansion_max_similarity": self.query_expansion_max_similarity,
             "enable_context_compression": self.enable_context_compression,
             "context_compression_max_sentences": self.context_compression_max_sentences,
             "enable_parent_retrieval": self.enable_parent_retrieval,

@@ -30,6 +30,9 @@ class RagSettingsTest(unittest.TestCase):
         self.assertEqual(settings.llm_num_ctx, 4096)
         self.assertEqual(settings.llm_num_predict, 1024)
         self.assertEqual(settings.query_log_path, "logs/query_runs.jsonl")
+        self.assertFalse(settings.enable_query_expansion_similarity_filter)
+        self.assertEqual(settings.query_expansion_min_similarity, 0.35)
+        self.assertEqual(settings.query_expansion_max_similarity, 0.98)
         self.assertEqual(settings.chunk_strategy, "recursive_character")
         self.assertEqual(settings.chunk_schema_version, "v1")
         self.assertEqual(settings.index_manifest_filename, "index_manifest.json")
@@ -51,6 +54,7 @@ class RagSettingsTest(unittest.TestCase):
         self.assertEqual(settings.as_dict()["chunk_strategy"], "recursive_character")
         self.assertEqual(settings.as_dict()["references_policy"], "keep_with_metadata")
         self.assertEqual(settings.as_dict()["vision_model"], "qwen2.5vl:3b")
+        self.assertFalse(settings.as_dict()["enable_query_expansion_similarity_filter"])
         self.assertIsNone(settings.rerank_score_threshold)
         self.assertEqual(settings.rerank_min_docs, 2)
 
