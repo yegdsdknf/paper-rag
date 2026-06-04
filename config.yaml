@@ -69,6 +69,9 @@ default_bm25_weight: 0.5
 enable_rerank: true
 reranker_model: ./models/bge-reranker-v2-m3-ms
 rerank_top_k: 6
+# 默认关闭分数阈值；做过 benchmark 校准后再改为具体数值。
+rerank_score_threshold: null
+rerank_min_docs: 2
 
 # ============ Query Expansion / Multi-Query（任务5）============
 # 仅作用于标准 mixed 检索路径；原始 query 保留，额外生成 query 变体后统一 rerank。

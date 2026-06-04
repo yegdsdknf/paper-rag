@@ -1,6 +1,7 @@
 from paper_rag.retrieval.router import (
     RetrievalRouter,
     deduplicate_docs,
+    filter_by_rerank_score_threshold,
     get_compare_anchor_docs,
     get_source_evidence_docs,
     get_source_anchor_docs,
@@ -14,6 +15,7 @@ from paper_rag.retrieval.router import (
 __all__ = [
     "RetrievalRouter",
     "deduplicate_docs",
+    "filter_by_rerank_score_threshold",
     "get_compare_anchor_docs",
     "get_source_evidence_docs",
     "get_source_anchor_docs",

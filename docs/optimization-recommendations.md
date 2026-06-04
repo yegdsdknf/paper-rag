@@ -409,6 +409,12 @@ Streamlit 来源展示当前主要显示文件名、页码和 `st.text(d.page_co
 
 `reranker.py` 已将 `rerank_score` 写入 metadata，但目前主要按 `top_k` 截断，不按分数阈值过滤。
 
+**实施状态**
+
+| 状态 | 实际改动 | 验证命令 |
+|---|---|---|
+| 已完成 | 新增 `rerank_score_threshold`、`rerank_min_docs` 配置；默认关闭阈值；仅普通 mixed 路由按 `rerank_score` 过滤，并保留最小文档数；evidence/source anchor 路径不应用阈值 | `.\.venv\Scripts\python.exe -m unittest tests.test_config_settings tests.test_retrieval_router` |
+
 **风险**
 
 | 风险 | 说明 |

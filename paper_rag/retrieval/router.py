@@ -27,6 +27,43 @@ def deduplicate_docs(docs: list[Document]) -> list[Document]:
     return unique
 
 
+def filter_by_rerank_score_threshold(
+    docs: list[Document],
+    threshold: float | None,
+    min_docs: int,
+) -> list[Document]:
+    if threshold is None or threshold <= 0 or not docs:
+        return docs
+    if not any("rerank_score" in (doc.metadata or {}) for doc in docs):
+        return docs
+
+    kept = [doc for doc in docs if _rerank_score(doc) is not None and _rerank_score(doc) >= threshold]
+    if len(kept) >= min_docs:
+        return kept
+
+    kept_keys = {_doc_identity(doc) for doc in kept}
+    for doc in docs:
+        if len(kept) >= min_docs:
+            break
+        key = _doc_identity(doc)
+        if key in kept_keys:
+            continue
+        kept.append(doc)
+        kept_keys.add(key)
+    return kept
+
+
+def _rerank_score(doc: Document) -> float | None:
+    try:
+        return float((doc.metadata or {}).get("rerank_score"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _doc_identity(doc: Document) -> tuple[Any, Any, str]:
+    return (doc.metadata.get("source", ""), doc.metadata.get("page", -1), doc.page_content)
+
+
 def is_comparison_question(question: str) -> bool:
     comparison_signals = [
         "vs", "versus", "difference", "differences",
@@ -350,6 +387,12 @@ class RetrievalRouter:
                     model_name=get_setting(self.settings, "reranker_model", "BAAI/bge-reranker-v2-m3"),
                     top_k=rerank_top_k,
                     device=self.embedding_device_fn(),
+                )
+            if not is_comparison and not source_files:
+                docs = filter_by_rerank_score_threshold(
+                    docs,
+                    get_setting(self.settings, "rerank_score_threshold", None),
+                    int(get_setting(self.settings, "rerank_min_docs", 2)),
                 )
             if is_comparison:
                 docs = deduplicate_docs(get_compare_anchor_docs(hybrid, question, self.settings) + docs)[:rerank_top_k]

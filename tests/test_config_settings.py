@@ -51,6 +51,8 @@ class RagSettingsTest(unittest.TestCase):
         self.assertEqual(settings.as_dict()["chunk_strategy"], "recursive_character")
         self.assertEqual(settings.as_dict()["references_policy"], "keep_with_metadata")
         self.assertEqual(settings.as_dict()["vision_model"], "qwen2.5vl:3b")
+        self.assertIsNone(settings.rerank_score_threshold)
+        self.assertEqual(settings.rerank_min_docs, 2)
 
     def test_from_mapping_normalizes_vision_force_pages(self):
         from paper_rag.config import RagSettings
@@ -92,6 +94,29 @@ class RagSettingsTest(unittest.TestCase):
         self.assertEqual(get_setting({"k": 3}, "k", 6), 3)
         self.assertEqual(get_setting(settings, "k", 3), 6)
         self.assertEqual(get_setting(settings, "missing", "fallback"), "fallback")
+
+    def test_rerank_threshold_settings_are_optional(self):
+        from paper_rag.config import RagSettings
+
+        settings = RagSettings.from_mapping(
+            {
+                "persist_directory": "./chroma_db",
+                "embedding_model": "BAAI/bge-m3",
+                "llm_model": "qwen2.5:3b",
+                "temperature": 0.1,
+                "k": 6,
+                "chunk_size": 500,
+                "chunk_overlap": 100,
+                "separators": ["\n\n", "\n"],
+                "rerank_score_threshold": 0.35,
+                "rerank_min_docs": 3,
+            }
+        )
+
+        self.assertEqual(settings.rerank_score_threshold, 0.35)
+        self.assertEqual(settings.rerank_min_docs, 3)
+        self.assertEqual(settings.as_dict()["rerank_score_threshold"], 0.35)
+        self.assertEqual(settings.as_dict()["rerank_min_docs"], 3)
 
 
 if __name__ == "__main__":

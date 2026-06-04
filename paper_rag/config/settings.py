@@ -30,6 +30,8 @@ class RagSettings:
     enable_rerank: bool = False
     reranker_model: str = ""
     rerank_top_k: int = 6
+    rerank_score_threshold: float | None = None
+    rerank_min_docs: int = 2
     enable_query_expansion: bool = False
     query_expansion_model: str | None = None
     query_expansion_variants: int = 2
@@ -96,6 +98,8 @@ class RagSettings:
             enable_rerank=bool(data.get("enable_rerank", False)),
             reranker_model=str(data.get("reranker_model", "")),
             rerank_top_k=int(data.get("rerank_top_k", 6)),
+            rerank_score_threshold=_optional_float(data.get("rerank_score_threshold")),
+            rerank_min_docs=int(data.get("rerank_min_docs", 2)),
             enable_query_expansion=bool(data.get("enable_query_expansion", False)),
             query_expansion_model=(
                 str(data["query_expansion_model"]) if data.get("query_expansion_model") else None
@@ -150,6 +154,8 @@ class RagSettings:
             "enable_rerank": self.enable_rerank,
             "reranker_model": self.reranker_model,
             "rerank_top_k": self.rerank_top_k,
+            "rerank_score_threshold": self.rerank_score_threshold,
+            "rerank_min_docs": self.rerank_min_docs,
             "enable_query_expansion": self.enable_query_expansion,
             "query_expansion_model": self.query_expansion_model,
             "query_expansion_variants": self.query_expansion_variants,
@@ -190,3 +196,9 @@ def _normalize_skip_pages(value: Any) -> dict[str, list[int]]:
             continue
         normalized[str(key)] = [int(page) for page in pages]
     return normalized
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    return float(value)

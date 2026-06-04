@@ -89,6 +89,47 @@ class RetrievalRouterTest(unittest.TestCase):
         self.assertEqual([doc.metadata["source"] for doc in routed_docs], ["b.pdf", "a.pdf"])
         rerank.assert_called_once()
 
+    def test_rerank_threshold_filters_standard_mixed_route_with_min_docs(self):
+        docs = [
+            Document(page_content="weak", metadata={"source": "weak.pdf", "page": 1}),
+            Document(page_content="mid", metadata={"source": "mid.pdf", "page": 2}),
+            Document(page_content="best", metadata={"source": "best.pdf", "page": 3}),
+        ]
+        reranked = [
+            Document(page_content="best", metadata={"source": "best.pdf", "page": 3, "rerank_score": 0.91}),
+            Document(page_content="mid", metadata={"source": "mid.pdf", "page": 2, "rerank_score": 0.42}),
+            Document(page_content="weak", metadata={"source": "weak.pdf", "page": 1, "rerank_score": 0.11}),
+        ]
+        router = RetrievalRouter(
+            settings={
+                "enable_query_expansion": False,
+                "enable_rerank": True,
+                "rerank_top_k": 3,
+                "rerank_score_threshold": 0.6,
+                "rerank_min_docs": 2,
+            },
+            apply_rerank_fn=Mock(return_value=reranked),
+        )
+
+        routed_docs, strategy = router.route(FakeHybrid({"什么是语言模型？": docs}), "什么是语言模型？")
+
+        self.assertEqual(strategy, "mixed")
+        self.assertEqual([doc.metadata["source"] for doc in routed_docs], ["best.pdf", "mid.pdf"])
+
+    def test_rerank_threshold_is_disabled_by_default(self):
+        docs = [
+            Document(page_content="best", metadata={"source": "best.pdf", "page": 3, "rerank_score": 0.91}),
+            Document(page_content="weak", metadata={"source": "weak.pdf", "page": 1, "rerank_score": 0.01}),
+        ]
+        router = RetrievalRouter(
+            settings={"enable_query_expansion": False, "enable_rerank": True, "rerank_top_k": 2},
+            apply_rerank_fn=Mock(return_value=docs),
+        )
+
+        routed_docs, _ = router.route(FakeHybrid({"什么是 BERT？": docs}), "什么是 BERT？")
+
+        self.assertEqual([doc.metadata["source"] for doc in routed_docs], ["best.pdf", "weak.pdf"])
+
     def test_router_accepts_typed_settings(self):
         from paper_rag.config import RagSettings
 
@@ -152,6 +193,27 @@ class RetrievalRouterTest(unittest.TestCase):
             [("gpt3.pdf", 0), ("gpt3.pdf", 7)],
         )
         rerank.assert_not_called()
+
+    def test_rerank_threshold_does_not_filter_evidence_anchor_docs(self):
+        candidates = [
+            Document(page_content="gpt architecture", metadata={"source": "gpt3.pdf", "page": 7, "rerank_score": 0.01}),
+        ]
+        router = RetrievalRouter(
+            settings={
+                "enable_query_expansion": False,
+                "enable_rerank": True,
+                "rerank_top_k": 5,
+                "rerank_score_threshold": 0.9,
+                "rerank_min_docs": 1,
+            },
+            apply_rerank_fn=Mock(return_value=[]),
+        )
+
+        docs, strategy = router.route(FakeHybridWithStore({"GPT-3 使用 Transformer 结构的证据在哪一页？": candidates}), "GPT-3 使用 Transformer 结构的证据在哪一页？")
+
+        self.assertEqual(strategy, "mixed")
+        self.assertIn(("gpt3.pdf", 0), [(doc.metadata["source"], doc.metadata["page"]) for doc in docs])
+        self.assertIn(("gpt3.pdf", 7), [(doc.metadata["source"], doc.metadata["page"]) for doc in docs])
 
     def test_generic_transformer_overview_pins_origin_paper_front_page(self):
         docs = [
