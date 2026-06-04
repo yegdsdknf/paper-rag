@@ -26,6 +26,7 @@ from paper_rag.observability.service import write_query_log
 from paper_rag.observability.trace import TraceTimer
 from paper_rag.pipeline.retrieval import (
     retrieve_documents,
+    retrieve_multi_query as retrieve_multi_query_pipeline,
     retrieve_with_hyde as retrieve_with_hyde_pipeline,
 )
 from paper_rag.retrieval.hybrid import HybridRetriever
@@ -177,55 +178,20 @@ def _retrieve_multi_query(
     temperature: float = TEMPERATURE,
 ) -> tuple[list, list[str]]:
     """对原始 query 和改写 query 分别召回，合并去重后返回。"""
-    current_settings = _get_settings()
     _query_expansion_trace["variants"] = []
     _query_expansion_trace["rejections"] = []
-    original_docs = _retrieve(hybrid, question)
-    if not current_settings.enable_query_expansion:
-        return original_docs, []
-
-    n_variants = current_settings.query_expansion_variants
-    expansion_model = current_settings.query_expansion_model or llm_model
-    llm = _get_llm(expansion_model, temperature)
-    try:
-        variants = expand_query(question, llm, n_variants=n_variants)
-    except Exception as exc:
-        print(f"⚠️  Query expansion 失败：{type(exc).__name__}: {exc}，仅使用原始 query")
-        return original_docs, []
-
-    if not variants:
-        return original_docs, []
-
-    filter_result = filter_query_variants(
-        question,
-        variants,
-        embed_fn=query_variant_embed_fn_from_hybrid(hybrid),
-        enabled=current_settings.enable_query_expansion_similarity_filter,
-        min_similarity=current_settings.query_expansion_min_similarity,
-        max_similarity=current_settings.query_expansion_max_similarity,
+    result = retrieve_multi_query_pipeline(
+        hybrid=hybrid,
+        question=question,
+        settings=_get_settings(),
+        llm_model=llm_model,
+        temperature=temperature,
+        llm_factory=_get_llm,
+        retrieve_fn=_retrieve,
     )
-    variants = filter_result.variants
-    _query_expansion_trace["variants"] = list(variants)
-    _query_expansion_trace["rejections"] = list(filter_result.rejections)
-    for item in filter_result.rejections:
-        variant = item.get("variant") or "<all>"
-        print(f"⚠️  Query variant filtered: {item.get('reason')} · {variant}")
-
-    if not variants:
-        return original_docs, []
-
-    print("🔎 Query variants:")
-    for index, variant in enumerate(variants, 1):
-        print(f"  {index}. {variant}")
-
-    merged_docs = list(original_docs)
-    for variant in variants:
-        merged_docs.extend(_retrieve(hybrid, variant))
-
-    merged_docs = _deduplicate_docs(merged_docs)
-    max_multiplier = current_settings.query_expansion_max_multiplier
-    max_docs = max(len(original_docs) * max_multiplier, len(original_docs))
-    return merged_docs[:max_docs], variants
+    _query_expansion_trace["variants"] = list(result.variants)
+    _query_expansion_trace["rejections"] = list(result.rejections)
+    return result.docs, result.variants
 
 
 def _retrieve_with_hyde(
