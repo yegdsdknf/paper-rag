@@ -136,6 +136,27 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(log_calls[0]["standalone_question"], "standalone")
         self.assertEqual(log_calls[0]["elapsed"], {"total": 0.3})
 
+    def test_handle_llm_unavailable_response_writes_error_log_and_returns_token_event(self):
+        from paper_rag.pipeline.service import handle_llm_unavailable_response
+
+        log_calls = []
+
+        events = handle_llm_unavailable_response(
+            question="original",
+            standalone_question="standalone",
+            route="hyde",
+            llm_model="qwen2.5:3b",
+            docs=["doc"],
+            elapsed={"total": 0.4},
+            context_stats={"input_chars": 20},
+            write_query_log_fn=lambda **kwargs: log_calls.append(kwargs),
+        )
+
+        self.assertEqual(events, [{"type": "token", "data": "❌ LLM 模型未连接"}])
+        self.assertEqual(log_calls[0]["docs"], ["doc"])
+        self.assertEqual(log_calls[0]["context_stats"], {"input_chars": 20})
+        self.assertEqual(log_calls[0]["error"], "LLM 模型未连接")
+
 
 if __name__ == "__main__":
     unittest.main()

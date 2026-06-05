@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 
 NO_DOCS_MESSAGE = "❌ 未找到相关内容"
+LLM_STREAM_DISCONNECTED_MESSAGE = "❌ LLM 模型未连接"
+LLM_DISCONNECTED_ERROR = "LLM 模型未连接"
 
 
 @dataclass(frozen=True)
@@ -90,3 +92,28 @@ def handle_no_docs_response(
     if stream:
         return [{"type": "token", "data": NO_DOCS_MESSAGE}]
     return NO_DOCS_MESSAGE, []
+
+
+def handle_llm_unavailable_response(
+    *,
+    question: str,
+    standalone_question: str,
+    route: str,
+    llm_model: str,
+    docs: list[Any],
+    elapsed: dict[str, float],
+    context_stats: dict[str, Any],
+    write_query_log_fn: Callable[..., None],
+) -> list[dict[str, str]]:
+    """统一流式生成中 LLM 不可用时的错误日志和 token 事件。"""
+    write_query_log_fn(
+        question=question,
+        standalone_question=standalone_question,
+        route=route,
+        llm_model=llm_model,
+        docs=docs,
+        elapsed=elapsed,
+        context_stats=context_stats,
+        error=LLM_DISCONNECTED_ERROR,
+    )
+    return [{"type": "token", "data": LLM_STREAM_DISCONNECTED_MESSAGE}]

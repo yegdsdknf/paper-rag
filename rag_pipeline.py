@@ -22,7 +22,6 @@ from utils.prompt_loader import load_prompt
 from paper_rag.config import RagSettings
 from paper_rag.generation.context import build_context_stats, prepare_docs_for_context
 from paper_rag.generation.service import (
-    LLM_STREAM_DISCONNECTED_MESSAGE,
     format_docs as format_generation_docs,
     generate_answer,
     generate_answer_from_docs,
@@ -37,7 +36,12 @@ from paper_rag.pipeline.retrieval import (
     retrieve_with_hyde as retrieve_with_hyde_pipeline,
     route_retrieve as route_retrieve_pipeline,
 )
-from paper_rag.pipeline.service import handle_no_docs_response, reformulate_question, write_pipeline_query_log
+from paper_rag.pipeline.service import (
+    handle_llm_unavailable_response,
+    handle_no_docs_response,
+    reformulate_question,
+    write_pipeline_query_log,
+)
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
     expand_query,
@@ -417,7 +421,7 @@ def ask_stream(
     context_docs = prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
     llm = _get_llm(llm_model, temperature)
     if llm is None:
-        _write_query_log(
+        for event in handle_llm_unavailable_response(
             question=question,
             standalone_question=standalone_q,
             route=strategy,
@@ -429,9 +433,9 @@ def ask_stream(
                 timer.elapsed_since(generate_start),
             ),
             context_stats=build_context_stats(docs, context_docs),
-            error="LLM 模型未连接",
-        )
-        yield {"type": "token", "data": LLM_STREAM_DISCONNECTED_MESSAGE}
+            write_query_log_fn=_write_query_log,
+        ):
+            yield event
         return
 
     for text in stream_answer_from_docs(

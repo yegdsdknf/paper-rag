@@ -617,6 +617,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.reformulate_question`，统一非流式和流式入口的多轮追问改写决策；`rag_pipeline` 继续负责打印、事件和日志 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
 | 已完成 | 新增 `paper_rag.pipeline.service.write_pipeline_query_log`，将 mixed route 的 query expansion trace 选择逻辑从 `rag_pipeline._write_query_log` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger` |
 | 已完成 | 新增 `paper_rag.pipeline.service.handle_no_docs_response`，统一多轮与流式入口无检索结果时的空 docs 日志和返回消息 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
+| 已完成 | 新增 `paper_rag.pipeline.service.handle_llm_unavailable_response`，统一流式生成中 LLM 不可用时的错误日志和 token 事件 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
 
 **建议拆分**
 
