@@ -273,6 +273,36 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(calls[0]["prepared_context_docs"], ["prepared"])
         self.assertEqual(calls[0]["stream_answer_tokens_fn"], "stream-tokens")
 
+    def test_generate_prepared_answer_delegates_to_generation_service(self):
+        from paper_rag.pipeline.service import generate_prepared_answer
+
+        calls = []
+
+        def generate_answer_from_docs(**kwargs):
+            calls.append(kwargs)
+            return "answer"
+
+        answer = generate_prepared_answer(
+            question="question",
+            docs=["doc"],
+            history_text="history",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            hybrid="hybrid",
+            settings="settings",
+            prepared_context_docs=["prepared"],
+            prepare_docs_fn="prepare-docs",
+            format_docs_fn="format-docs",
+            load_prompt_fn="load-prompt",
+            get_llm_fn="get-llm",
+            generate_answer_fn="generate-answer",
+            generate_answer_from_docs_fn=generate_answer_from_docs,
+        )
+
+        self.assertEqual(answer, "answer")
+        self.assertEqual(calls[0]["prepared_context_docs"], ["prepared"])
+        self.assertEqual(calls[0]["generate_answer_fn"], "generate-answer")
+
     def test_stream_retrieval_events_wraps_route_and_docs(self):
         from paper_rag.pipeline.service import stream_retrieval_events
 

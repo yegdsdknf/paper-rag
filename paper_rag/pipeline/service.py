@@ -190,6 +190,46 @@ def write_successful_response_log(
     )
 
 
+def generate_prepared_answer(
+    *,
+    question: str,
+    docs: list[Any],
+    history_text: str,
+    llm_model: str,
+    temperature: float,
+    hybrid: Any,
+    settings: Any,
+    prepared_context_docs: list[Any] | None,
+    prepare_docs_fn: Any,
+    format_docs_fn: Any,
+    load_prompt_fn: Any,
+    get_llm_fn: Any,
+    generate_answer_fn: Any,
+    generate_answer_from_docs_fn: Callable[..., str] | None = None,
+) -> str:
+    """调用生成层非流式回答，保留入口层依赖注入能力。"""
+    if generate_answer_from_docs_fn is None:
+        from paper_rag.generation.service import generate_answer_from_docs
+
+        generate_answer_from_docs_fn = generate_answer_from_docs
+
+    return generate_answer_from_docs_fn(
+        question=question,
+        docs=docs,
+        history_text=history_text,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+        settings=settings,
+        prepared_context_docs=prepared_context_docs,
+        prepare_docs_fn=prepare_docs_fn,
+        format_docs_fn=format_docs_fn,
+        load_prompt_fn=load_prompt_fn,
+        get_llm_fn=get_llm_fn,
+        generate_answer_fn=generate_answer_fn,
+    )
+
+
 def stream_token_events(tokens: Any) -> Any:
     """将生成层文本 token 包装为 ask_stream 的事件格式。"""
     for token in tokens:

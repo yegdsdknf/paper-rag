@@ -24,7 +24,6 @@ from paper_rag.generation.context import build_context_stats, prepare_docs_for_c
 from paper_rag.generation.service import (
     format_docs as format_generation_docs,
     generate_answer,
-    generate_answer_from_docs,
     stream_answer_tokens,
 )
 from paper_rag.observability.service import write_query_log
@@ -38,6 +37,7 @@ from paper_rag.pipeline.retrieval import (
 from paper_rag.pipeline.service import (
     HYDE_NO_DOCS_MESSAGE,
     build_no_docs_response,
+    generate_prepared_answer,
     handle_llm_unavailable_response,
     handle_no_docs_response,
     prepare_pipeline_context,
@@ -234,7 +234,7 @@ def _generate_answer(
     prepared_context_docs: list | None = None,
 ) -> str:
     """用检索到的文档 + 可选多轮历史生成最终答案（非流式）"""
-    return generate_answer_from_docs(
+    return generate_prepared_answer(
         question=question,
         docs=docs,
         history_text=history_text,
