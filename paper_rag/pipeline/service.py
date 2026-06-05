@@ -247,6 +247,128 @@ def ask_with_context(
     return answer, docs
 
 
+def ask_stream(
+    *,
+    hybrid: Any,
+    conversation: Any,
+    question: str,
+    llm_model: str,
+    temperature: float,
+    settings: Any,
+    route_retrieve_fn: Callable[[Any, str, str, float], tuple[list[Any], str]],
+    get_llm_fn: Callable[[str, float], Any],
+    write_query_log_fn: Callable[..., None],
+    prepare_docs_fn: Callable[..., list[Any]] | None = None,
+    build_stats_fn: Callable[[list[Any], list[Any]], dict[str, Any]] | None = None,
+    format_docs_fn: Any | None = None,
+    load_prompt_fn: Any | None = None,
+    stream_answer_tokens_fn: Any | None = None,
+    stream_answer_from_docs_fn: Callable[..., Any] | None = None,
+    timer_factory: Callable[[], Any] | None = None,
+) -> Any:
+    """流式问答编排，保留 ask_stream 的事件顺序和日志语义。"""
+    if timer_factory is None:
+        from paper_rag.observability.trace import TraceTimer
+
+        timer_factory = TraceTimer
+    if format_docs_fn is None:
+        from paper_rag.generation.service import format_docs
+
+        format_docs_fn = format_docs
+    if load_prompt_fn is None:
+        from utils.prompt_loader import load_prompt
+
+        load_prompt_fn = load_prompt
+    if stream_answer_tokens_fn is None:
+        from paper_rag.generation.service import stream_answer_tokens
+
+        stream_answer_tokens_fn = stream_answer_tokens
+
+    timer = timer_factory()
+    rewrite_start = timer.start_stage()
+    rewrite_result = reformulate_question(conversation, question, require_history=True)
+    standalone_question = rewrite_result.standalone_question
+    yield from stream_rewrite_events(rewrite_result)
+    rewrite_elapsed = timer.elapsed_since(rewrite_start)
+
+    retrieve_start = timer.start_stage()
+    docs, route = route_retrieve_fn(hybrid, standalone_question, llm_model, temperature)
+    retrieve_elapsed = timer.elapsed_since(retrieve_start)
+    yield from stream_retrieval_events(route, docs)
+
+    if not docs:
+        yield from handle_no_docs_response(
+            question=question,
+            standalone_question=standalone_question,
+            route=route,
+            llm_model=llm_model,
+            elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
+            stream=True,
+            write_query_log_fn=write_query_log_fn,
+        )
+        return
+
+    generate_start = timer.start_stage()
+    history_text = format_conversation_history(conversation)
+    pipeline_context = prepare_pipeline_context(
+        question=question,
+        docs=docs,
+        hybrid=hybrid,
+        settings=settings,
+        prepare_docs_fn=prepare_docs_fn,
+        build_stats_fn=build_stats_fn,
+    )
+    llm = resolve_stream_llm(llm_model=llm_model, temperature=temperature, get_llm_fn=get_llm_fn)
+    if llm is None:
+        yield from handle_llm_unavailable_response(
+            question=question,
+            standalone_question=standalone_question,
+            route=route,
+            llm_model=llm_model,
+            docs=docs,
+            elapsed=timer.elapsed_map(
+                rewrite_elapsed,
+                retrieve_elapsed,
+                timer.elapsed_since(generate_start),
+            ),
+            context_stats=pipeline_context.context_stats,
+            write_query_log_fn=write_query_log_fn,
+        )
+        return
+
+    yield from stream_prepared_answer_events(
+        question=question,
+        docs=docs,
+        history_text=history_text,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+        settings=settings,
+        prepared_context_docs=pipeline_context.context_docs,
+        prepare_docs_fn=prepare_docs_fn,
+        format_docs_fn=format_docs_fn,
+        load_prompt_fn=load_prompt_fn,
+        get_llm_fn=fixed_llm_factory(llm),
+        stream_answer_tokens_fn=stream_answer_tokens_fn,
+        stream_answer_from_docs_fn=stream_answer_from_docs_fn,
+    )
+
+    write_successful_response_log(
+        question=question,
+        standalone_question=standalone_question,
+        route=route,
+        llm_model=llm_model,
+        docs=docs,
+        elapsed=timer.elapsed_map(
+            rewrite_elapsed,
+            retrieve_elapsed,
+            timer.elapsed_since(generate_start),
+        ),
+        context_stats=pipeline_context.context_stats,
+        write_query_log_fn=write_query_log_fn,
+    )
+
+
 def handle_no_docs_response(
     *,
     question: str,

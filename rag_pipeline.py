@@ -27,7 +27,6 @@ from paper_rag.generation.service import (
     stream_answer_tokens,
 )
 from paper_rag.observability.service import write_query_log
-from paper_rag.observability.trace import TraceTimer
 from paper_rag.pipeline.retrieval import (
     retrieve_documents,
     retrieve_multi_query as retrieve_multi_query_pipeline,
@@ -35,22 +34,12 @@ from paper_rag.pipeline.retrieval import (
     route_retrieve as route_retrieve_pipeline,
 )
 from paper_rag.pipeline.service import (
+    ask_stream as ask_stream_service,
     ask_with_context as ask_with_context_service,
     ask_with_hyde as ask_with_hyde_service,
-    fixed_llm_factory,
-    format_conversation_history,
     generate_prepared_answer,
-    handle_llm_unavailable_response,
-    handle_no_docs_response,
-    prepare_pipeline_context,
-    reformulate_question,
-    resolve_stream_llm,
     route_question as route_question_service,
-    stream_prepared_answer_events,
-    stream_retrieval_events,
-    stream_rewrite_events,
     write_pipeline_query_log,
-    write_successful_response_log,
 )
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
@@ -370,95 +359,21 @@ def ask_stream(
             elif event["type"] == "token":
                 yield event["data"]  # 逐字输出到 Web
     """
-    timer = TraceTimer()
-    # Step 1: 改写追问（多轮时）
-    rewrite_start = timer.start_stage()
-    rewrite_result = reformulate_question(conversation, question, require_history=True)
-    standalone_q = rewrite_result.standalone_question
-    for event in stream_rewrite_events(rewrite_result):
-        yield event
-    rewrite_elapsed = timer.elapsed_since(rewrite_start)
-
-    # Step 2: 路由检索（统一入口）
-    retrieve_start = timer.start_stage()
-    docs, strategy = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
-    retrieve_elapsed = timer.elapsed_since(retrieve_start)
-    for event in stream_retrieval_events(strategy, docs):
-        yield event
-
-    if not docs:
-        for event in handle_no_docs_response(
-            question=question,
-            standalone_question=standalone_q,
-            route=strategy,
-            llm_model=llm_model,
-            elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
-            stream=True,
-            write_query_log_fn=_write_query_log,
-        ):
-            yield event
-        return
-
-    # Step 3: 流式生成
-    generate_start = timer.start_stage()
-    history_text = format_conversation_history(conversation)
-    pipeline_context = prepare_pipeline_context(
-        question=question,
-        docs=docs,
+    yield from ask_stream_service(
         hybrid=hybrid,
-        settings=_get_settings(),
-        prepare_docs_fn=prepare_docs_for_context,
-        build_stats_fn=build_context_stats,
-    )
-    llm = resolve_stream_llm(llm_model=llm_model, temperature=temperature, get_llm_fn=_get_llm)
-    if llm is None:
-        for event in handle_llm_unavailable_response(
-            question=question,
-            standalone_question=standalone_q,
-            route=strategy,
-            llm_model=llm_model,
-            docs=docs,
-            elapsed=timer.elapsed_map(
-                rewrite_elapsed,
-                retrieve_elapsed,
-                timer.elapsed_since(generate_start),
-            ),
-            context_stats=pipeline_context.context_stats,
-            write_query_log_fn=_write_query_log,
-        ):
-            yield event
-        return
-
-    for event in stream_prepared_answer_events(
+        conversation=conversation,
         question=question,
-        docs=docs,
-        history_text=history_text,
         llm_model=llm_model,
         temperature=temperature,
-        hybrid=hybrid,
         settings=_get_settings(),
-        prepared_context_docs=pipeline_context.context_docs,
+        route_retrieve_fn=_route_retrieve,
+        get_llm_fn=_get_llm,
+        write_query_log_fn=_write_query_log,
         prepare_docs_fn=prepare_docs_for_context,
+        build_stats_fn=build_context_stats,
         format_docs_fn=_format_docs,
         load_prompt_fn=load_prompt,
-        get_llm_fn=fixed_llm_factory(llm),
         stream_answer_tokens_fn=stream_answer_tokens,
-    ):
-        yield event
-
-    write_successful_response_log(
-        question=question,
-        standalone_question=standalone_q,
-        route=strategy,
-        llm_model=llm_model,
-        docs=docs,
-        elapsed=timer.elapsed_map(
-            rewrite_elapsed,
-            retrieve_elapsed,
-            timer.elapsed_since(generate_start),
-        ),
-        context_stats=pipeline_context.context_stats,
-        write_query_log_fn=_write_query_log,
     )
 
 

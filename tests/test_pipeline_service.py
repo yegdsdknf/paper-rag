@@ -361,6 +361,148 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(logs[0]["route"], "hyde")
         self.assertEqual(logs[0]["elapsed"], {"rewrite": 0.1, "retrieve": 0.2, "generate": 0.0, "total": 0.3})
 
+    def test_ask_stream_yields_rewrite_retrieval_tokens_and_writes_success_log(self):
+        from paper_rag.pipeline.service import ask_stream
+
+        docs = ["doc"]
+        calls = []
+        logs = []
+
+        def route_retrieve(hybrid, question, llm_model, temperature):
+            calls.append(("route", hybrid, question, llm_model, temperature))
+            return docs, "hyde"
+
+        def prepare_docs(question, input_docs, *, hybrid, settings):
+            calls.append(("prepare", question, input_docs, hybrid, settings))
+            return ["prepared-doc"]
+
+        def build_stats(input_docs, context_docs):
+            calls.append(("stats", input_docs, context_docs))
+            return {"input_chars": 10, "output_chars": 8}
+
+        def get_llm(llm_model, temperature):
+            calls.append(("llm", llm_model, temperature))
+            return "llm"
+
+        def stream_tokens(**kwargs):
+            calls.append(("stream", kwargs["history_text"], kwargs["prepared_context_docs"], kwargs["get_llm_fn"]("x", 1.0)))
+            return ["ans", "wer"]
+
+        events = list(
+            ask_stream(
+                hybrid="hybrid",
+                conversation=FakeConversation(history=["turn"], rewritten="standalone question"),
+                question="follow up",
+                llm_model="qwen2.5:3b",
+                temperature=0.1,
+                settings="settings",
+                route_retrieve_fn=route_retrieve,
+                get_llm_fn=get_llm,
+                write_query_log_fn=lambda **kwargs: logs.append(kwargs),
+                prepare_docs_fn=prepare_docs,
+                build_stats_fn=build_stats,
+                format_docs_fn="format-docs",
+                load_prompt_fn="load-prompt",
+                stream_answer_tokens_fn="stream-answer-tokens",
+                stream_answer_from_docs_fn=stream_tokens,
+                timer_factory=FakeTimer,
+            )
+        )
+
+        self.assertEqual(
+            events,
+            [
+                {"type": "rewrite", "data": "standalone question"},
+                {"type": "route", "data": "hyde"},
+                {"type": "docs", "data": docs},
+                {"type": "token", "data": "ans"},
+                {"type": "token", "data": "wer"},
+            ],
+        )
+        self.assertEqual(
+            calls,
+            [
+                ("route", "hybrid", "standalone question", "qwen2.5:3b", 0.1),
+                ("prepare", "follow up", docs, "hybrid", "settings"),
+                ("stats", docs, ["prepared-doc"]),
+                ("llm", "qwen2.5:3b", 0.1),
+                ("stream", "formatted history", ["prepared-doc"], "llm"),
+            ],
+        )
+        self.assertEqual(logs[0]["question"], "follow up")
+        self.assertEqual(logs[0]["standalone_question"], "standalone question")
+        self.assertEqual(logs[0]["route"], "hyde")
+        self.assertEqual(logs[0]["context_stats"], {"input_chars": 10, "output_chars": 8})
+        self.assertEqual(logs[0]["elapsed"], {"rewrite": 0.1, "retrieve": 0.2, "generate": 0.3, "total": 0.6})
+
+    def test_ask_stream_yields_no_docs_message_and_skips_generation(self):
+        from paper_rag.pipeline.service import ask_stream
+
+        logs = []
+
+        events = list(
+            ask_stream(
+                hybrid="hybrid",
+                conversation=FakeConversation(history=[], rewritten="unused"),
+                question="first question",
+                llm_model="qwen2.5:3b",
+                temperature=0.1,
+                settings="settings",
+                route_retrieve_fn=lambda *_args: ([], "mixed"),
+                get_llm_fn=lambda *_args: self.fail("llm should be skipped"),
+                write_query_log_fn=lambda **kwargs: logs.append(kwargs),
+                prepare_docs_fn=lambda *_args, **_kwargs: self.fail("context preparation should be skipped"),
+                build_stats_fn=lambda *_args: self.fail("context stats should be skipped"),
+                format_docs_fn="format-docs",
+                load_prompt_fn="load-prompt",
+                stream_answer_tokens_fn="stream-answer-tokens",
+                timer_factory=FakeTimer,
+            )
+        )
+
+        self.assertEqual(
+            events,
+            [
+                {"type": "route", "data": "mixed"},
+                {"type": "docs", "data": []},
+                {"type": "token", "data": "❌ 未找到相关内容"},
+            ],
+        )
+        self.assertEqual(logs[0]["docs"], [])
+        self.assertEqual(logs[0]["route"], "mixed")
+        self.assertEqual(logs[0]["elapsed"], {"rewrite": 0.1, "retrieve": 0.2, "generate": 0.0, "total": 0.3})
+
+    def test_ask_stream_yields_llm_unavailable_message_and_writes_error_log(self):
+        from paper_rag.pipeline.service import ask_stream
+
+        logs = []
+
+        events = list(
+            ask_stream(
+                hybrid="hybrid",
+                conversation=FakeConversation(history=["turn"], rewritten="standalone question"),
+                question="follow up",
+                llm_model="qwen2.5:3b",
+                temperature=0.1,
+                settings="settings",
+                route_retrieve_fn=lambda *_args: (["doc"], "hyde"),
+                get_llm_fn=lambda *_args: None,
+                write_query_log_fn=lambda **kwargs: logs.append(kwargs),
+                prepare_docs_fn=lambda *_args, **_kwargs: ["prepared-doc"],
+                build_stats_fn=lambda *_args: {"input_chars": 10},
+                format_docs_fn="format-docs",
+                load_prompt_fn="load-prompt",
+                stream_answer_tokens_fn="stream-answer-tokens",
+                timer_factory=FakeTimer,
+            )
+        )
+
+        self.assertEqual(events[-1], {"type": "token", "data": "❌ LLM 模型未连接"})
+        self.assertEqual(logs[0]["docs"], ["doc"])
+        self.assertEqual(logs[0]["route"], "hyde")
+        self.assertEqual(logs[0]["context_stats"], {"input_chars": 10})
+        self.assertEqual(logs[0]["error"], "LLM 模型未连接")
+
     def test_handle_no_docs_response_can_return_stream_events(self):
         from paper_rag.pipeline.service import handle_no_docs_response
 

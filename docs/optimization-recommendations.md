@@ -11,7 +11,7 @@
 | 维度 | 当前状态 | 判断 |
 |---|---|---|
 | 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config、runtime、pipeline 等主要实现；根目录同类模块已降级为兼容薄壳，并补充 deprecation 指引与测试保护 | 已进入兼容壳退场策略阶段 |
-| 主链路编排 | `rag_pipeline.py` 仍是旧公开入口；运行时、检索、生成、日志、单轮兼容入口、非流式多轮入口和大部分流式 helper 已迁入包内，根文件主要负责旧签名、patch 兼容和依赖注入 | 继续做 facade 化的小切片，不做一次性删除 |
+| 主链路编排 | `rag_pipeline.py` 仍是旧公开入口；运行时、检索、生成、日志、单轮兼容入口、非流式多轮入口和流式入口编排已迁入包内，根文件主要负责旧签名、patch 兼容和依赖注入 | 已接近纯 facade，后续重点是兼容壳退场策略 |
 | 配置管理 | `RagSettings.from_mapping()`、`main.py doctor --json`、启动诊断数据模型和 formatter 已落地 | 后续可把 doctor 数据模型接入 Streamlit 初始化失败页 |
 | 检索能力 | 已具备混合检索、BM25 持久化、动态权重、HyDE、Query Expansion 质量过滤、Rerank 阈值、Parent Retrieval、Context Compression 和语义原型缓存 | 主线优化基本完成，后续重点是校准和体验 |
 | Web UI | Streamlit 页面已有流式刷新节流、友好错误、来源 view model、页码/分数/高亮片段/折叠原文、模型切换、上传入库和反馈保存 | 后续可复用 doctor 数据模型做初始化失败页 |
@@ -36,7 +36,7 @@
 | P2 | Context Compression 打分改进 | 已完成 | 继续观察关键证据误删风险 |
 | P3 | Embedding 原型预计算 | 已完成缓存第一版 | 按冷启动数据评估收益 |
 | P3 | 包化迁移最终收口 | 进行中，兼容薄壳已加注释和测试保护 | 确认外部调用后再退场薄壳 |
-| P3 | `rag_pipeline.py` 继续瘦身 | 进行中，单轮与非流式多轮兼容入口已迁入 service | 下一刀可迁 `ask_stream` 顶层编排 |
+| P3 | `rag_pipeline.py` 继续瘦身 | 已完成主要编排迁移，单轮、非流式多轮和流式入口均已迁入 service | 后续只保留兼容 facade 并评估旧入口退场 |
 
 ---
 
@@ -559,7 +559,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 |---|---|---|
 | 真实入口 | `app.py`、`main.py`、`query.py`、`build_knowledge.py`、`rag_pipeline.py` | 暂时保留 |
 | 兼容薄壳 | `app_services.py`、`feedback.py`、`generation_service.py`、`context_builder.py`、`retrieval_router.py`、`source_utils.py`、`query_expansion.py`、`reranker.py`、`context_compression.py`、`parent_retrieval.py`、`hybrid_retriever.py`、`query_logger.py` | 已补模块级兼容说明和测试保护；分阶段退场 |
-| 仍有真实实现 | `rag_pipeline.py` 仍保留旧公开入口、patch 兼容和流式事件/日志顶层编排 | 下一步继续迁 `ask_stream` 顶层编排 |
+| 仍有真实实现 | `rag_pipeline.py` 主要保留旧公开入口、patch 兼容和依赖注入 | 下一步评估旧入口退场和外部 import 清单 |
 
 **已完成进展**
 
@@ -600,7 +600,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 运行时环境 | HuggingFace offline 环境变量、device 选择 |
 | 生命周期 | LLM cache、embedding、Chroma、HybridRetriever 构建 |
 | 检索编排 | retrieve、multi-query、HyDE、route wrapper |
-| 生成编排 | 单轮和非流式多轮入口已迁入 service；`ask_stream` 仍保留顶层事件顺序、日志和兼容注入 |
+| 生成编排 | 单轮、非流式多轮和流式入口均已迁入 service；根文件保留兼容注入 |
 | 演示入口 | `main()` 测试问答 |
 
 **已完成进展**
@@ -633,6 +633,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.resolve_stream_llm`，将流式入口运行时 LLM 实例解析迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.route_question` 与 `ask_with_hyde`，将单轮兼容入口的路由/HyDE/无文档/生成编排迁入包内；`rag_pipeline.py` 仅注入 `_route_retrieve`、`_retrieve_with_hyde`、`_generate_answer` 以保留 patch 兼容语义 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_package_module_migration` |
 | 已完成 | 新增 `paper_rag.pipeline.service.ask_with_context`，将非流式多轮入口的问题改写、检索、上下文准备、生成和成功/无文档日志编排迁入包内；`rag_pipeline.py` 仅注入旧 helper 以保留 patch 兼容语义 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_package_imports` |
+| 已完成 | 新增 `paper_rag.pipeline.service.ask_stream`，将流式入口的 rewrite/route/docs/token 事件顺序、无文档响应、LLM 不可用处理和成功日志迁入包内；`rag_pipeline.py` 仅注入旧 helper 以保留 patch 兼容语义 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming tests.test_package_imports` |
 
 **建议拆分**
 
@@ -658,7 +659,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 
 | 顺序 | 当前剩余任务 | 验收命令 |
 |---|---|---|
-| 1 | 继续 `rag_pipeline.py` facade 化，优先迁 `ask_stream` 的顶层编排到 `paper_rag.pipeline.service` | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
+| 1 | 梳理根目录旧入口和兼容薄壳的真实调用清单，决定退场顺序 | `rg "from (rag_pipeline|generation_service|retrieval_router|query_expansion|reranker|context_compression|hybrid_retriever)" .` |
 | 2 | 持续保护根目录兼容薄壳，确认旧 import 与 patch 兼容语义不被破坏 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 | 3 | 将 Streamlit 初始化失败页复用 doctor 数据模型 | `.\.venv\Scripts\python.exe -m unittest tests.test_config_diagnostics tests.test_ui_errors` |
 | 4 | CLI/build 入库错误格式复用统一 formatter | `.\.venv\Scripts\python.exe -m unittest tests.test_main_cli tests.test_ui_errors` |
@@ -684,9 +685,10 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 
 | 顺序 | 任务 | 为什么 |
 |---|---|---|
-| 1 | 将 `ask_stream` 的事件顺序、LLM 不可用处理和成功日志收束成包内服务函数 | 流式入口行为面最广，先用 helper 保持小步迁移 |
-| 2 | 保留 `rag_pipeline.py` 旧签名，仅注入旧 patch 点 | 降低外部调用方和现有测试的迁移风险 |
-| 3 | 回跑 query log、app services、UI streaming 和 package migration 测试 | 覆盖日志字段、事件顺序、旧 import 和 patch 兼容 |
+| 1 | 建立旧根入口 import 清单，区分项目内部、测试和潜在外部调用 | 退场前先知道谁还依赖旧路径 |
+| 2 | 对内部调用优先改成 `paper_rag.*` 包路径，保留测试中必要的 patch 兼容覆盖 | 让真实代码不再依赖薄壳 |
+| 3 | 将根目录薄壳退场写成明确策略：保留、警告、或删除 | 防止一次性删除造成非必要破坏 |
+| 4 | 回跑 package migration、query logger、app services 和完整测试 | 覆盖旧 import、日志字段、事件顺序和兼容 facade |
 
 这个闭环完成后，`rag_pipeline.py` 将更接近纯 facade；根目录薄壳是否退场就可以基于真实 import 清单单独决策。
 
