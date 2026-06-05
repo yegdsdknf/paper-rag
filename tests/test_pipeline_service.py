@@ -324,6 +324,26 @@ class PipelineServiceTest(unittest.TestCase):
 
         self.assertIs(factory("other-model", 0.9), llm)
 
+    def test_resolve_stream_llm_delegates_to_runtime_factory(self):
+        from paper_rag.pipeline.service import resolve_stream_llm
+
+        calls = []
+        llm = object()
+
+        def get_llm(model, temperature):
+            calls.append((model, temperature))
+            return llm
+
+        self.assertIs(
+            resolve_stream_llm(
+                llm_model="qwen2.5:3b",
+                temperature=0.2,
+                get_llm_fn=get_llm,
+            ),
+            llm,
+        )
+        self.assertEqual(calls, [("qwen2.5:3b", 0.2)])
+
     def test_stream_retrieval_events_wraps_route_and_docs(self):
         from paper_rag.pipeline.service import stream_retrieval_events
 

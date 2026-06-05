@@ -44,6 +44,7 @@ from paper_rag.pipeline.service import (
     handle_no_docs_response,
     prepare_pipeline_context,
     reformulate_question,
+    resolve_stream_llm,
     stream_prepared_answer_events,
     stream_retrieval_events,
     stream_rewrite_events,
@@ -442,7 +443,7 @@ def ask_stream(
         prepare_docs_fn=prepare_docs_for_context,
         build_stats_fn=build_context_stats,
     )
-    llm = _get_llm(llm_model, temperature)
+    llm = resolve_stream_llm(llm_model=llm_model, temperature=temperature, get_llm_fn=_get_llm)
     if llm is None:
         for event in handle_llm_unavailable_response(
             question=question,

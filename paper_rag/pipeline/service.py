@@ -240,6 +240,16 @@ def fixed_llm_factory(llm: Any) -> Callable[[str, float], Any]:
     return lambda _model, _temperature: llm
 
 
+def resolve_stream_llm(
+    *,
+    llm_model: str,
+    temperature: float,
+    get_llm_fn: Callable[[str, float], Any],
+) -> Any:
+    """统一流式入口对运行时 LLM 实例的解析。"""
+    return get_llm_fn(llm_model, temperature)
+
+
 def stream_token_events(tokens: Any) -> Any:
     """将生成层文本 token 包装为 ask_stream 的事件格式。"""
     for token in tokens:

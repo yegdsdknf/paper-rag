@@ -629,6 +629,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.generate_prepared_answer`，将非流式生成层调用的依赖拼装迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_generation_service tests.test_app_services` |
 | 已完成 | 新增 `paper_rag.pipeline.service.format_conversation_history`，将非流式与流式入口的会话历史文本读取迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_app_services tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.fixed_llm_factory`，将流式入口中已解析 LLM 实例到生成层工厂函数的适配迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_ui_streaming` |
+| 已完成 | 新增 `paper_rag.pipeline.service.resolve_stream_llm`，将流式入口运行时 LLM 实例解析迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_ui_streaming` |
 
 **建议拆分**
 
