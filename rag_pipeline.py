@@ -37,7 +37,7 @@ from paper_rag.pipeline.retrieval import (
     retrieve_with_hyde as retrieve_with_hyde_pipeline,
     route_retrieve as route_retrieve_pipeline,
 )
-from paper_rag.pipeline.service import reformulate_question, write_pipeline_query_log
+from paper_rag.pipeline.service import handle_no_docs_response, reformulate_question, write_pipeline_query_log
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
     expand_query,
@@ -323,15 +323,14 @@ def ask_with_context(
     retrieve_elapsed = timer.elapsed_since(retrieve_start)
 
     if not docs:
-        _write_query_log(
+        return handle_no_docs_response(
             question=question,
             standalone_question=standalone_q,
             route=route,
             llm_model=llm_model,
-            docs=[],
             elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
+            write_query_log_fn=_write_query_log,
         )
-        return "❌ 未找到相关内容", []
 
     history_text = conversation.format_history()
     generate_start = timer.start_stage()
@@ -400,15 +399,16 @@ def ask_stream(
     yield {"type": "docs", "data": docs}
 
     if not docs:
-        _write_query_log(
+        for event in handle_no_docs_response(
             question=question,
             standalone_question=standalone_q,
             route=strategy,
             llm_model=llm_model,
-            docs=[],
             elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
-        )
-        yield {"type": "token", "data": "❌ 未找到相关内容"}
+            stream=True,
+            write_query_log_fn=_write_query_log,
+        ):
+            yield event
         return
 
     # Step 3: 流式生成

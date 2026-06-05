@@ -99,6 +99,43 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(calls[0]["query_variant_rejections"], [])
         self.assertEqual(calls[0]["error"], "LLM unavailable")
 
+    def test_handle_no_docs_response_writes_log_and_returns_answer_tuple(self):
+        from paper_rag.pipeline.service import handle_no_docs_response
+
+        log_calls = []
+
+        result = handle_no_docs_response(
+            question="original",
+            standalone_question="standalone",
+            route="hyde",
+            llm_model="qwen2.5:3b",
+            elapsed={"total": 0.3},
+            write_query_log_fn=lambda **kwargs: log_calls.append(kwargs),
+        )
+
+        self.assertEqual(result, ("❌ 未找到相关内容", []))
+        self.assertEqual(log_calls[0]["docs"], [])
+        self.assertEqual(log_calls[0]["route"], "hyde")
+
+    def test_handle_no_docs_response_can_return_stream_events(self):
+        from paper_rag.pipeline.service import handle_no_docs_response
+
+        log_calls = []
+
+        events = handle_no_docs_response(
+            question="original",
+            standalone_question="standalone",
+            route="mixed",
+            llm_model="qwen2.5:3b",
+            elapsed={"total": 0.3},
+            stream=True,
+            write_query_log_fn=lambda **kwargs: log_calls.append(kwargs),
+        )
+
+        self.assertEqual(events, [{"type": "token", "data": "❌ 未找到相关内容"}])
+        self.assertEqual(log_calls[0]["standalone_question"], "standalone")
+        self.assertEqual(log_calls[0]["elapsed"], {"total": 0.3})
+
 
 if __name__ == "__main__":
     unittest.main()

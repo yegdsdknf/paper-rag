@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 
+NO_DOCS_MESSAGE = "❌ 未找到相关内容"
+
+
 @dataclass(frozen=True)
 class ReformulationResult:
     standalone_question: str
@@ -63,3 +66,27 @@ def write_pipeline_query_log(
         context_stats=context_stats,
         error=error,
     )
+
+
+def handle_no_docs_response(
+    *,
+    question: str,
+    standalone_question: str,
+    route: str,
+    llm_model: str,
+    elapsed: dict[str, float],
+    stream: bool = False,
+    write_query_log_fn: Callable[..., None],
+) -> tuple[str, list[Any]] | list[dict[str, str]]:
+    """统一无检索结果时的日志和返回值，保留入口层事件顺序。"""
+    write_query_log_fn(
+        question=question,
+        standalone_question=standalone_question,
+        route=route,
+        llm_model=llm_model,
+        docs=[],
+        elapsed=elapsed,
+    )
+    if stream:
+        return [{"type": "token", "data": NO_DOCS_MESSAGE}]
+    return NO_DOCS_MESSAGE, []
