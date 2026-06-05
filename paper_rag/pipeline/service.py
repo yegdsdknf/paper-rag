@@ -149,3 +149,9 @@ def handle_llm_unavailable_response(
         error=LLM_DISCONNECTED_ERROR,
     )
     return [{"type": "token", "data": LLM_STREAM_DISCONNECTED_MESSAGE}]
+
+
+def stream_token_events(tokens: Any) -> Any:
+    """将生成层文本 token 包装为 ask_stream 的事件格式。"""
+    for token in tokens:
+        yield {"type": "token", "data": token}

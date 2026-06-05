@@ -191,6 +191,19 @@ class PipelineServiceTest(unittest.TestCase):
             ],
         )
 
+    def test_stream_token_events_wraps_text_tokens(self):
+        from paper_rag.pipeline.service import stream_token_events
+
+        events = list(stream_token_events(["ans", "wer"]))
+
+        self.assertEqual(
+            events,
+            [
+                {"type": "token", "data": "ans"},
+                {"type": "token", "data": "wer"},
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

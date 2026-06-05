@@ -41,6 +41,7 @@ from paper_rag.pipeline.service import (
     handle_no_docs_response,
     prepare_pipeline_context,
     reformulate_question,
+    stream_token_events,
     write_pipeline_query_log,
 )
 from paper_rag.retrieval.hybrid import HybridRetriever
@@ -453,22 +454,24 @@ def ask_stream(
             yield event
         return
 
-    for text in stream_answer_from_docs(
-        question=question,
-        docs=docs,
-        history_text=history_text,
-        llm_model=llm_model,
-        temperature=temperature,
-        hybrid=hybrid,
-        settings=_get_settings(),
-        prepared_context_docs=pipeline_context.context_docs,
-        prepare_docs_fn=prepare_docs_for_context,
-        format_docs_fn=_format_docs,
-        load_prompt_fn=load_prompt,
-        get_llm_fn=lambda _model, _temperature: llm,
-        stream_answer_tokens_fn=stream_answer_tokens,
+    for event in stream_token_events(
+        stream_answer_from_docs(
+            question=question,
+            docs=docs,
+            history_text=history_text,
+            llm_model=llm_model,
+            temperature=temperature,
+            hybrid=hybrid,
+            settings=_get_settings(),
+            prepared_context_docs=pipeline_context.context_docs,
+            prepare_docs_fn=prepare_docs_for_context,
+            format_docs_fn=_format_docs,
+            load_prompt_fn=load_prompt,
+            get_llm_fn=lambda _model, _temperature: llm,
+            stream_answer_tokens_fn=stream_answer_tokens,
+        )
     ):
-        yield {"type": "token", "data": text}
+        yield event
 
     _write_query_log(
         question=question,

@@ -619,6 +619,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.handle_no_docs_response`，统一多轮与流式入口无检索结果时的空 docs 日志和返回消息 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
 | 已完成 | 新增 `paper_rag.pipeline.service.handle_llm_unavailable_response`，统一流式生成中 LLM 不可用时的错误日志和 token 事件 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
 | 已完成 | 新增 `paper_rag.pipeline.service.prepare_pipeline_context`，统一生成前上下文准备与 context stats 计算，供非流式和流式入口复用 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_context_builder tests.test_context_compression tests.test_parent_retrieval` |
+| 已完成 | 新增 `paper_rag.pipeline.service.stream_token_events`，将正常流式生成 token 的事件包装从 `rag_pipeline.ask_stream` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
 
 **建议拆分**
 
