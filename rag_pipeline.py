@@ -39,6 +39,7 @@ from paper_rag.pipeline.retrieval import (
 from paper_rag.pipeline.service import (
     handle_llm_unavailable_response,
     handle_no_docs_response,
+    prepare_pipeline_context,
     reformulate_question,
     write_pipeline_query_log,
 )
@@ -338,7 +339,14 @@ def ask_with_context(
 
     history_text = conversation.format_history()
     generate_start = timer.start_stage()
-    context_docs = prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
+    pipeline_context = prepare_pipeline_context(
+        question=question,
+        docs=docs,
+        hybrid=hybrid,
+        settings=_get_settings(),
+        prepare_docs_fn=prepare_docs_for_context,
+        build_stats_fn=build_context_stats,
+    )
     answer = _generate_answer(
         question,
         docs,
@@ -346,7 +354,7 @@ def ask_with_context(
         llm_model=llm_model,
         temperature=temperature,
         hybrid=hybrid,
-        prepared_context_docs=context_docs,
+        prepared_context_docs=pipeline_context.context_docs,
     )
     generate_elapsed = timer.elapsed_since(generate_start)
     _write_query_log(
@@ -356,7 +364,7 @@ def ask_with_context(
         llm_model=llm_model,
         docs=docs,
         elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, generate_elapsed),
-        context_stats=build_context_stats(docs, context_docs),
+        context_stats=pipeline_context.context_stats,
     )
     return answer, docs
 
@@ -418,7 +426,14 @@ def ask_stream(
     # Step 3: 流式生成
     generate_start = timer.start_stage()
     history_text = conversation.format_history()
-    context_docs = prepare_docs_for_context(question, docs, hybrid=hybrid, settings=_get_settings())
+    pipeline_context = prepare_pipeline_context(
+        question=question,
+        docs=docs,
+        hybrid=hybrid,
+        settings=_get_settings(),
+        prepare_docs_fn=prepare_docs_for_context,
+        build_stats_fn=build_context_stats,
+    )
     llm = _get_llm(llm_model, temperature)
     if llm is None:
         for event in handle_llm_unavailable_response(
@@ -432,7 +447,7 @@ def ask_stream(
                 retrieve_elapsed,
                 timer.elapsed_since(generate_start),
             ),
-            context_stats=build_context_stats(docs, context_docs),
+            context_stats=pipeline_context.context_stats,
             write_query_log_fn=_write_query_log,
         ):
             yield event
@@ -446,7 +461,7 @@ def ask_stream(
         temperature=temperature,
         hybrid=hybrid,
         settings=_get_settings(),
-        prepared_context_docs=context_docs,
+        prepared_context_docs=pipeline_context.context_docs,
         prepare_docs_fn=prepare_docs_for_context,
         format_docs_fn=_format_docs,
         load_prompt_fn=load_prompt,
@@ -466,7 +481,7 @@ def ask_stream(
             retrieve_elapsed,
             timer.elapsed_since(generate_start),
         ),
-        context_stats=build_context_stats(docs, context_docs),
+        context_stats=pipeline_context.context_stats,
     )
 
 

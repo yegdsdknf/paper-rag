@@ -15,6 +15,12 @@ class ReformulationResult:
     rewritten: bool
 
 
+@dataclass(frozen=True)
+class PipelineContext:
+    context_docs: list[Any]
+    context_stats: dict[str, Any]
+
+
 def reformulate_question(
     conversation: Any,
     question: str,
@@ -29,6 +35,32 @@ def reformulate_question(
     return ReformulationResult(
         standalone_question=standalone_question,
         rewritten=standalone_question != question,
+    )
+
+
+def prepare_pipeline_context(
+    *,
+    question: str,
+    docs: list[Any],
+    hybrid: Any,
+    settings: Any,
+    prepare_docs_fn: Callable[..., list[Any]] | None = None,
+    build_stats_fn: Callable[[list[Any], list[Any]], dict[str, Any]] | None = None,
+) -> PipelineContext:
+    """准备生成上下文及其统计信息，供非流式和流式入口复用。"""
+    if prepare_docs_fn is None:
+        from paper_rag.generation.context import prepare_docs_for_context
+
+        prepare_docs_fn = prepare_docs_for_context
+    if build_stats_fn is None:
+        from paper_rag.generation.context import build_context_stats
+
+        build_stats_fn = build_context_stats
+
+    context_docs = prepare_docs_fn(question, docs, hybrid=hybrid, settings=settings)
+    return PipelineContext(
+        context_docs=context_docs,
+        context_stats=build_stats_fn(docs, context_docs),
     )
 
 

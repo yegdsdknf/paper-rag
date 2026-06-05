@@ -157,6 +157,40 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(log_calls[0]["context_stats"], {"input_chars": 20})
         self.assertEqual(log_calls[0]["error"], "LLM 模型未连接")
 
+    def test_prepare_pipeline_context_returns_prepared_docs_and_stats(self):
+        from paper_rag.pipeline.service import prepare_pipeline_context
+
+        calls = []
+        original_docs = ["doc"]
+        prepared_docs = ["prepared"]
+
+        def prepare_docs(question, docs, *, hybrid, settings):
+            calls.append(("prepare", question, docs, hybrid, settings))
+            return prepared_docs
+
+        def build_stats(docs, context_docs):
+            calls.append(("stats", docs, context_docs))
+            return {"input_chars": 10, "output_chars": 4}
+
+        result = prepare_pipeline_context(
+            question="original question",
+            docs=original_docs,
+            hybrid="hybrid",
+            settings="settings",
+            prepare_docs_fn=prepare_docs,
+            build_stats_fn=build_stats,
+        )
+
+        self.assertEqual(result.context_docs, prepared_docs)
+        self.assertEqual(result.context_stats, {"input_chars": 10, "output_chars": 4})
+        self.assertEqual(
+            calls,
+            [
+                ("prepare", "original question", original_docs, "hybrid", "settings"),
+                ("stats", original_docs, prepared_docs),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
