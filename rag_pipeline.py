@@ -37,6 +37,7 @@ from paper_rag.pipeline.retrieval import (
 from paper_rag.pipeline.service import (
     HYDE_NO_DOCS_MESSAGE,
     build_no_docs_response,
+    format_conversation_history,
     generate_prepared_answer,
     handle_llm_unavailable_response,
     handle_no_docs_response,
@@ -342,7 +343,7 @@ def ask_with_context(
             write_query_log_fn=_write_query_log,
         )
 
-    history_text = conversation.format_history()
+    history_text = format_conversation_history(conversation)
     generate_start = timer.start_stage()
     pipeline_context = prepare_pipeline_context(
         question=question,
@@ -431,7 +432,7 @@ def ask_stream(
 
     # Step 3: 流式生成
     generate_start = timer.start_stage()
-    history_text = conversation.format_history()
+    history_text = format_conversation_history(conversation)
     pipeline_context = prepare_pipeline_context(
         question=question,
         docs=docs,

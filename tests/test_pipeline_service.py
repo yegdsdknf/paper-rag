@@ -6,10 +6,15 @@ class FakeConversation:
         self.history = history or []
         self.rewritten = rewritten
         self.reformulate_calls = []
+        self.format_history_calls = 0
 
     def reformulate(self, question):
         self.reformulate_calls.append(question)
         return self.rewritten
+
+    def format_history(self):
+        self.format_history_calls += 1
+        return "formatted history"
 
 
 class PipelineServiceTest(unittest.TestCase):
@@ -45,6 +50,14 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(result.standalone_question, "same question")
         self.assertFalse(result.rewritten)
         self.assertEqual(conversation.reformulate_calls, ["same question"])
+
+    def test_format_conversation_history_delegates_to_conversation(self):
+        from paper_rag.pipeline.service import format_conversation_history
+
+        conversation = FakeConversation()
+
+        self.assertEqual(format_conversation_history(conversation), "formatted history")
+        self.assertEqual(conversation.format_history_calls, 1)
 
     def test_write_rewrite_notice_prints_only_when_rewritten(self):
         from paper_rag.pipeline.service import ReformulationResult, write_rewrite_notice

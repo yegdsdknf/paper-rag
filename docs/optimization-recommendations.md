@@ -627,6 +627,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.build_no_docs_response`，将兼容入口的无文档 tuple 返回构造迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_app_services` |
 | 已完成 | 新增 `paper_rag.pipeline.service.stream_prepared_answer_events`，将流式生成层调用与 token 事件包装迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.generate_prepared_answer`，将非流式生成层调用的依赖拼装迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_generation_service tests.test_app_services` |
+| 已完成 | 新增 `paper_rag.pipeline.service.format_conversation_history`，将非流式与流式入口的会话历史文本读取迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_app_services tests.test_ui_streaming` |
 
 **建议拆分**
 

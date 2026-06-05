@@ -39,6 +39,11 @@ def reformulate_question(
     )
 
 
+def format_conversation_history(conversation: Any) -> str:
+    """统一入口层对会话历史文本的读取。"""
+    return conversation.format_history()
+
+
 def write_rewrite_notice(
     result: ReformulationResult,
     *,
