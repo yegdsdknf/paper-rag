@@ -2,7 +2,7 @@
 
 > 本文档基于当前代码状态重新整理，重点区分“已有基础”和“真实缺口”，并给出可执行的优先级、风险和验收方式。
 >
-> 生成时间：2026-06-03
+> 状态更新时间：2026-06-05
 
 ---
 
@@ -10,33 +10,33 @@
 
 | 维度 | 当前状态 | 判断 |
 |---|---|---|
-| 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config 等实现；`hybrid_retriever`、`query_expansion`、`reranker`、`context_compression` 已迁入包内，根目录保留兼容薄壳和入口文件 | 已进入最终收口阶段，不是从零开始 |
-| 主链路编排 | `rag_pipeline.py` 仍是主要入口，约 500 行，但已委托到 router、context、generation、observability 模块 | 需要继续收敛为 facade，而非大拆大改 |
-| 配置管理 | `RagSettings.from_mapping()` 已做必填项和类型转换 | 缺少启动时资源检查和友好诊断 |
-| 检索能力 | 已具备混合检索、动态权重、HyDE、Query Expansion、Rerank、Parent Retrieval、Context Compression | 优化重点应转向缓存、阈值校准和回归评估 |
-| Web UI | Streamlit 页面可用，已有流式输出、模型切换、上传入库和反馈保存 | 逐 token 刷新和来源展示仍可明显改善 |
-| 评估体系 | 已有 benchmark、holdout、baseline runner、eval metrics | 缺少新旧报告自动对比和质量门禁 |
-| 文档 | README 与 architecture 已覆盖运行命令、架构边界和迁移历史 | 缺少面向新手的排障 FAQ 和最短上手路径 |
+| 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config、runtime、pipeline 等主要实现；根目录同类模块已降级为兼容薄壳，并补充 deprecation 指引与测试保护 | 已进入兼容壳退场策略阶段 |
+| 主链路编排 | `rag_pipeline.py` 仍是旧公开入口，约 529 行；运行时、检索、生成、日志、单轮兼容入口和大部分流式 helper 已迁入包内，根文件主要负责旧签名、patch 兼容和依赖注入 | 继续做 facade 化的小切片，不做一次性删除 |
+| 配置管理 | `RagSettings.from_mapping()`、`main.py doctor --json`、启动诊断数据模型和 formatter 已落地 | 后续可把 doctor 数据模型接入 Streamlit 初始化失败页 |
+| 检索能力 | 已具备混合检索、BM25 持久化、动态权重、HyDE、Query Expansion 质量过滤、Rerank 阈值、Parent Retrieval、Context Compression 和语义原型缓存 | 主线优化基本完成，后续重点是校准和体验 |
+| Web UI | Streamlit 页面已有流式刷新节流、友好错误、来源 view model、页码/分数/高亮片段/折叠原文、模型切换、上传入库和反馈保存 | 后续可复用 doctor 数据模型做初始化失败页 |
+| 评估体系 | 已有 benchmark、holdout、baseline runner、eval metrics 和 regression check | 质量门禁主线已具备，后续可接入更自动化的运行流程 |
+| 文档 | README、getting-started、FAQ、architecture 与本文档已覆盖上手、排障、架构和迁移历史 | 需要随包化收口持续刷新状态 |
 
 ---
 
 ## 二、推荐优先级总览
 
-| 优先级 | 优化项 | 核心收益 | 预估风险 | 建议节奏 |
-|---|---|---|---|---|
-| P0 | 启动诊断与配置资源检查 | 减少“为什么不工作”的时间成本 | 低 | 立即做 |
-| P0 | 错误提示友好化 | 降低新手上手门槛 | 低 | 立即做 |
-| P0 | Streamlit 流式刷新节流 | 改善页面抖动和交互体验 | 低 | 立即做 |
-| P0 | FAQ 与快速开始补齐 | 降低重复排障成本 | 低 | 立即做 |
-| P1 | BM25 索引持久化 | 降低检索器初始化成本 | 中 | 先设计失效策略 |
-| P1 | Benchmark 回归检测 | 防止检索质量无意退化 | 中 | 和指标报告一起落地 |
-| P1 | 来源展示高亮与评分信息 | 提升答案可解释性 | 中 | 注意 Markdown 转义 |
-| P2 | Rerank 阈值过滤 | 降低低相关证据噪声 | 中 | 需要 benchmark 校准 |
-| P2 | Query Expansion 质量过滤 | 降低发散 query 带来的噪声召回 | 中 | 需要成本收益评估 |
-| P2 | Context Compression 打分改进 | 提升送入 LLM 的证据密度 | 中 | 需要防止误删关键上下文 |
-| P3 | Embedding 原型预计算 | 缩短检索器冷启动 | 低到中 | 收益较小，后置 |
-| P3 | 包化迁移最终收口 | 降低长期维护成本 | 中到高 | 分阶段替换 import |
-| P3 | `rag_pipeline.py` 继续瘦身 | 改善可维护性 | 中 | 等核心行为稳定后做 |
+| 优先级 | 优化项 | 当前状态 | 下一步 |
+|---|---|---|---|
+| P0 | 启动诊断与配置资源检查 | 已完成 CLI 第一版与 `--json` | 后续接入 Streamlit 初始化失败页 |
+| P0 | 错误提示友好化 | 已覆盖 Streamlit 初始化和问答失败 | 后续 CLI/build 复用统一 formatter |
+| P0 | Streamlit 流式刷新节流 | 已完成 `TokenStreamBuffer` 与 UI 接入 | 保持参数轻量，按体验再调 |
+| P0 | FAQ 与快速开始补齐 | 已完成 `docs/getting-started.md` 与 `docs/FAQ.md` | 随真实问题增补 |
+| P1 | BM25 索引持久化 | 已完成 | 保持 manifest/version 失效策略测试 |
+| P1 | Benchmark 回归检测 | 已完成 regression check | 可接入固定 CI 或本地发布流程 |
+| P1 | 来源展示高亮与评分信息 | 已完成 | 后续按 UI 反馈微调展示密度 |
+| P2 | Rerank 阈值过滤 | 已完成，默认关闭 | 用 benchmark 校准默认值 |
+| P2 | Query Expansion 质量过滤 | 已完成，默认关闭 | 用真实问题评估开启收益 |
+| P2 | Context Compression 打分改进 | 已完成 | 继续观察关键证据误删风险 |
+| P3 | Embedding 原型预计算 | 已完成缓存第一版 | 按冷启动数据评估收益 |
+| P3 | 包化迁移最终收口 | 进行中，兼容薄壳已加注释和测试保护 | 确认外部调用后再退场薄壳 |
+| P3 | `rag_pipeline.py` 继续瘦身 | 进行中，单轮兼容入口已迁入 service | 下一刀可迁 `ask_with_context` / `ask_stream` 顶层编排 |
 
 ---
 
@@ -558,8 +558,8 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 类型 | 示例 | 建议 |
 |---|---|---|
 | 真实入口 | `app.py`、`main.py`、`query.py`、`build_knowledge.py`、`rag_pipeline.py` | 暂时保留 |
-| 兼容薄壳 | `generation_service.py`、`context_builder.py`、`retrieval_router.py`、`source_utils.py`、`query_expansion.py`、`reranker.py`、`context_compression.py` | 分阶段移除 |
-| 仍有真实实现 | 暂无明确必须迁移的检索/生成 helper | 下一步聚焦 `rag_pipeline.py` 继续瘦身和兼容壳退场策略 |
+| 兼容薄壳 | `app_services.py`、`feedback.py`、`generation_service.py`、`context_builder.py`、`retrieval_router.py`、`source_utils.py`、`query_expansion.py`、`reranker.py`、`context_compression.py`、`parent_retrieval.py`、`hybrid_retriever.py`、`query_logger.py` | 已补模块级兼容说明和测试保护；分阶段退场 |
+| 仍有真实实现 | `rag_pipeline.py` 仍保留旧公开入口、patch 兼容和少量事件/日志顶层编排 | 下一步继续迁 `ask_with_context` / `ask_stream` 顶层编排 |
 
 **已完成进展**
 
@@ -568,13 +568,14 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.generation.context_compression`、`paper_rag.retrieval.query_expansion`、`paper_rag.retrieval.reranker`，根目录同名文件降级为兼容薄壳 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 | 已完成 | `paper_rag.generation.context`、`paper_rag.retrieval.router`、`rag_pipeline.py` 的内部导入切换到 `paper_rag.*` 路径 | `.\.venv\Scripts\python.exe -m unittest tests.test_query_expansion tests.test_context_compression tests.test_reranker tests.test_retrieval_router tests.test_context_builder` |
 | 已完成 | 新增 `paper_rag.retrieval.hybrid`，根目录 `hybrid_retriever.py` 降级为兼容薄壳；`rag_pipeline.py` 与 `build_knowledge.py` 改用包内路径 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration tests.test_hybrid_retriever_bm25_cache tests.test_semantic_prototype_cache tests.test_build_experiment` |
+| 已完成 | 根目录兼容薄壳新增模块级 deprecation 指引，测试保护旧 import 仍可用且指向 `paper_rag.*` 新路径 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 
 **建议阶段**
 
 | 阶段 | 动作 | 验收 |
 |---|---|---|
 | 1 | 全局替换内部 import 为 `paper_rag.*` | 已覆盖 generation context、retrieval router 和 `rag_pipeline.py` 的核心辅助导入 |
-| 2 | 对薄壳增加 deprecation 注释或测试保护 | 旧入口仍可用；保留 `reranker.get_reranker` patch 兼容语义 |
+| 2 | 对薄壳增加 deprecation 注释或测试保护 | 已完成；旧入口仍可用，并新增单测保护兼容说明 |
 | 3 | 将剩余真实实现迁入 `paper_rag.retrieval`、`paper_rag.generation` | 已迁入 `hybrid_retriever`、`query_expansion`、`reranker`、`context_compression` |
 | 4 | 在确认无外部调用后删除薄壳 | README 和 docs 同步更新 |
 
@@ -599,7 +600,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 运行时环境 | HuggingFace offline 环境变量、device 选择 |
 | 生命周期 | LLM cache、embedding、Chroma、HybridRetriever 构建 |
 | 检索编排 | retrieve、multi-query、HyDE、route wrapper |
-| 生成编排 | ask、ask_stream、日志写入 |
+| 生成编排 | 单轮入口已迁入 service；`ask_with_context`、`ask_stream` 仍保留顶层事件顺序、日志和兼容注入 |
 | 演示入口 | `main()` 测试问答 |
 
 **已完成进展**
@@ -630,21 +631,22 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.format_conversation_history`，将非流式与流式入口的会话历史文本读取迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_app_services tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.fixed_llm_factory`，将流式入口中已解析 LLM 实例到生成层工厂函数的适配迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.resolve_stream_llm`，将流式入口运行时 LLM 实例解析迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_ui_streaming` |
+| 已完成 | 新增 `paper_rag.pipeline.service.route_question` 与 `ask_with_hyde`，将单轮兼容入口的路由/HyDE/无文档/生成编排迁入包内；`rag_pipeline.py` 仅注入 `_route_retrieve`、`_retrieve_with_hyde`、`_generate_answer` 以保留 patch 兼容语义 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_package_module_migration` |
 
 **建议拆分**
 
 | 目标模块 | 职责 |
 |---|---|
 | `paper_rag.runtime.models` | LLM cache、embedding device、模型构建 |
-| `paper_rag.pipeline.service` | `ask_with_context`、`ask_stream` |
+| `paper_rag.pipeline.service` | `route_question`、`ask_with_hyde`、`ask_with_context`、`ask_stream` 相关编排 helper |
 | `paper_rag.pipeline.retrieval` | `_retrieve`、multi-query、HyDE wrapper |
-| `rag_pipeline.py` | 仅保留兼容导出 |
+| `rag_pipeline.py` | 仅保留旧签名、patch 兼容、依赖注入和演示入口 |
 
 **验收方式**
 
 | 项目 | 要求 |
 |---|---|
-| 公开函数 | `build_hybrid_retriever`、`ask_with_context`、`ask_stream` 调用形状不变 |
+| 公开函数 | `build_hybrid_retriever`、`route_question`、`ask_with_hyde`、`ask_with_context`、`ask_stream` 调用形状不变 |
 | 行为 | 现有测试通过 |
 | 日志 | query log 字段不变 |
 | Benchmark | `run_baseline.py --no-generate` 通过 |
@@ -653,13 +655,13 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 
 ## 七、建议执行路线
 
-| 周期 | 任务 | 验收命令 |
+| 顺序 | 当前剩余任务 | 验收命令 |
 |---|---|---|
-| 第 1 批 | 启动诊断、错误提示、Streamlit 刷新节流、FAQ | `python -m unittest tests.test_config_settings tests.test_app_services` |
-| 第 2 批 | BM25 持久化、来源展示优化 | `python -m unittest tests.test_rag_rerank_integration tests.test_source_utils` |
-| 第 3 批 | Benchmark 回归检测 | `python benchmarks/run_baseline.py --no-generate`，再运行新增 regression check 单测 |
-| 第 4 批 | Rerank 阈值、Query Expansion 过滤、Compression 改进 | 完整 benchmark，对比 baseline |
-| 第 5 批 | 原型预计算、包化迁移收口、`rag_pipeline.py` 瘦身 | `python -m unittest discover -s tests` |
+| 1 | 继续 `rag_pipeline.py` facade 化，优先迁 `ask_with_context` / `ask_stream` 的顶层编排到 `paper_rag.pipeline.service` | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
+| 2 | 持续保护根目录兼容薄壳，确认旧 import 与 patch 兼容语义不被破坏 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
+| 3 | 将 Streamlit 初始化失败页复用 doctor 数据模型 | `.\.venv\Scripts\python.exe -m unittest tests.test_config_diagnostics tests.test_ui_errors` |
+| 4 | CLI/build 入库错误格式复用统一 formatter | `.\.venv\Scripts\python.exe -m unittest tests.test_main_cli tests.test_ui_errors` |
+| 5 | 阶段性跑完整回归和 benchmark 门禁 | `.\.venv\Scripts\python.exe -m unittest discover -s tests`，必要时再跑 `.\.venv\Scripts\python.exe benchmarks\run_baseline.py --no-generate` |
 
 ---
 
@@ -677,17 +679,16 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 
 ## 九、推荐先实施的最小闭环
 
-如果只选择一个最小闭环，建议按下面顺序：
+当前主线优化已基本完成。如果只继续一个最小闭环，建议聚焦包化收口：
 
 | 顺序 | 任务 | 为什么 |
 |---|---|---|
-| 1 | 新增 `doctor` 启动诊断 | 先让环境问题可解释 |
-| 2 | Streamlit 初始化和问答异常使用友好错误文案 | 让用户看到可执行解决方案 |
-| 3 | 流式刷新节流 | 立刻改善 Web 体验 |
-| 4 | 写 FAQ | 把诊断和错误文案沉淀成文档 |
-| 5 | 加 benchmark regression check | 后续质量优化才有保护栏 |
+| 1 | 将 `ask_with_context` 的剩余顶层编排迁入 `paper_rag.pipeline.service` | 非流式多轮入口是下一块仍留在根 facade 的业务编排 |
+| 2 | 将 `ask_stream` 的事件顺序、LLM 不可用处理和成功日志收束成包内服务函数 | 流式入口行为面最广，先用 helper 保持小步迁移 |
+| 3 | 保留 `rag_pipeline.py` 旧签名，仅注入旧 patch 点 | 降低外部调用方和现有测试的迁移风险 |
+| 4 | 回跑 query log、app services、UI streaming 和 package migration 测试 | 覆盖日志字段、事件顺序、旧 import 和 patch 兼容 |
 
-这个闭环的特点是风险低、收益清晰，并为后续 BM25 持久化、rerank 阈值、query expansion 过滤等质量相关改动提供验证基础。
+这个闭环完成后，`rag_pipeline.py` 将更接近纯 facade；根目录薄壳是否退场就可以基于真实 import 清单单独决策。
 
 ---
 

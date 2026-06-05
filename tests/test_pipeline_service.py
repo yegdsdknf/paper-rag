@@ -146,6 +146,96 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(build_no_docs_response(), ("❌ 未找到相关内容", []))
         self.assertEqual(build_no_docs_response("custom empty"), ("custom empty", []))
 
+    def test_route_question_delegates_routed_docs_to_answer_generation(self):
+        from paper_rag.pipeline.service import route_question
+
+        calls = []
+
+        def route_retrieve(hybrid, question, llm_model, temperature):
+            calls.append(("route", hybrid, question, llm_model, temperature))
+            return ["doc"], "mixed"
+
+        def generate_answer(question, docs, *, llm_model, temperature, hybrid):
+            calls.append(("generate", question, docs, llm_model, temperature, hybrid))
+            return "answer"
+
+        result = route_question(
+            hybrid="hybrid",
+            question="question",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            route_retrieve_fn=route_retrieve,
+            generate_answer_fn=generate_answer,
+        )
+
+        self.assertEqual(result, ("answer", ["doc"]))
+        self.assertEqual(
+            calls,
+            [
+                ("route", "hybrid", "question", "qwen2.5:3b", 0.1),
+                ("generate", "question", ["doc"], "qwen2.5:3b", 0.1, "hybrid"),
+            ],
+        )
+
+    def test_route_question_returns_standard_no_docs_response(self):
+        from paper_rag.pipeline.service import route_question
+
+        result = route_question(
+            hybrid="hybrid",
+            question="question",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            route_retrieve_fn=lambda *_args: ([], "hyde"),
+            generate_answer_fn=lambda **_kwargs: "unused",
+        )
+
+        self.assertEqual(result, ("❌ 未找到相关内容", []))
+
+    def test_ask_with_hyde_uses_hyde_no_docs_message(self):
+        from paper_rag.pipeline.service import ask_with_hyde
+
+        result = ask_with_hyde(
+            hybrid="hybrid",
+            question="question",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            hyde_retrieve_fn=lambda *_args: [],
+            generate_answer_fn=lambda **_kwargs: "unused",
+        )
+
+        self.assertEqual(result, ("❌ HyDE 检索未找到相关内容", []))
+
+    def test_ask_with_hyde_generates_answer_from_hyde_docs(self):
+        from paper_rag.pipeline.service import ask_with_hyde
+
+        calls = []
+
+        def hyde_retrieve(hybrid, question, llm_model, temperature):
+            calls.append(("hyde", hybrid, question, llm_model, temperature))
+            return ["hyde-doc"]
+
+        def generate_answer(question, docs, *, llm_model, temperature, hybrid):
+            calls.append(("generate", question, docs, llm_model, temperature, hybrid))
+            return "hyde answer"
+
+        result = ask_with_hyde(
+            hybrid="hybrid",
+            question="question",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            hyde_retrieve_fn=hyde_retrieve,
+            generate_answer_fn=generate_answer,
+        )
+
+        self.assertEqual(result, ("hyde answer", ["hyde-doc"]))
+        self.assertEqual(
+            calls,
+            [
+                ("hyde", "hybrid", "question", "qwen2.5:3b", 0.1),
+                ("generate", "question", ["hyde-doc"], "qwen2.5:3b", 0.1, "hybrid"),
+            ],
+        )
+
     def test_handle_no_docs_response_can_return_stream_events(self):
         from paper_rag.pipeline.service import handle_no_docs_response
 

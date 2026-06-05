@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 
 class PackageModuleMigrationTest(unittest.TestCase):
@@ -67,6 +68,65 @@ class PackageModuleMigrationTest(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for pattern in forbidden:
                 self.assertNotIn(pattern, text, f"{path} still imports root wrapper via {pattern}")
+
+    def test_root_compat_wrappers_document_package_replacement(self):
+        import importlib
+
+        wrappers = [
+            "context_builder",
+            "context_compression",
+            "app_services",
+            "feedback",
+            "generation_service",
+            "hybrid_retriever",
+            "parent_retrieval",
+            "query_expansion",
+            "query_logger",
+            "reranker",
+            "retrieval_router",
+            "source_utils",
+        ]
+
+        for module_name in wrappers:
+            module = importlib.import_module(module_name)
+            doc = module.__doc__ or ""
+            self.assertIn("兼容薄壳", doc, f"{module_name} should document its compatibility role")
+            self.assertIn("paper_rag.", doc, f"{module_name} should point callers to package imports")
+
+    def test_rag_pipeline_single_turn_entries_keep_patch_compatibility(self):
+        import rag_pipeline
+
+        with (
+            patch.object(rag_pipeline, "_route_retrieve", return_value=(["doc"], "mixed")) as route,
+            patch.object(rag_pipeline, "_generate_answer", return_value="answer") as generate,
+        ):
+            answer, docs = rag_pipeline.route_question("hybrid", "question", llm_model="model", temperature=0.1)
+
+        self.assertEqual((answer, docs), ("answer", ["doc"]))
+        route.assert_called_once_with("hybrid", "question", "model", 0.1)
+        generate.assert_called_once_with(
+            "question",
+            ["doc"],
+            llm_model="model",
+            temperature=0.1,
+            hybrid="hybrid",
+        )
+
+        with (
+            patch.object(rag_pipeline, "_retrieve_with_hyde", return_value=["hyde-doc"]) as retrieve,
+            patch.object(rag_pipeline, "_generate_answer", return_value="hyde answer") as generate,
+        ):
+            answer, docs = rag_pipeline.ask_with_hyde("hybrid", "question", llm_model="model", temperature=0.2)
+
+        self.assertEqual((answer, docs), ("hyde answer", ["hyde-doc"]))
+        retrieve.assert_called_once_with("hybrid", "question", "model", 0.2)
+        generate.assert_called_once_with(
+            "question",
+            ["hyde-doc"],
+            llm_model="model",
+            temperature=0.2,
+            hybrid="hybrid",
+        )
 
 
 if __name__ == "__main__":

@@ -123,6 +123,54 @@ def build_no_docs_response(message: str = NO_DOCS_MESSAGE) -> tuple[str, list[An
     return message, []
 
 
+def route_question(
+    *,
+    hybrid: Any,
+    question: str,
+    llm_model: str,
+    temperature: float,
+    route_retrieve_fn: Callable[[Any, str, str, float], tuple[list[Any], str]],
+    generate_answer_fn: Callable[..., str],
+) -> tuple[str, list[Any]]:
+    """单轮智能路由问答编排，供根目录 facade 注入兼容依赖。"""
+    docs, _route = route_retrieve_fn(hybrid, question, llm_model, temperature)
+    if not docs:
+        return build_no_docs_response()
+
+    answer = generate_answer_fn(
+        question,
+        docs,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+    )
+    return answer, docs
+
+
+def ask_with_hyde(
+    *,
+    hybrid: Any,
+    question: str,
+    llm_model: str,
+    temperature: float,
+    hyde_retrieve_fn: Callable[[Any, str, str, float], list[Any]],
+    generate_answer_fn: Callable[..., str],
+) -> tuple[str, list[Any]]:
+    """HyDE 单轮问答编排，保留专用的无文档提示。"""
+    docs = hyde_retrieve_fn(hybrid, question, llm_model, temperature)
+    if not docs:
+        return build_no_docs_response(HYDE_NO_DOCS_MESSAGE)
+
+    answer = generate_answer_fn(
+        question,
+        docs,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+    )
+    return answer, docs
+
+
 def handle_no_docs_response(
     *,
     question: str,

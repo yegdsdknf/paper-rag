@@ -35,8 +35,7 @@ from paper_rag.pipeline.retrieval import (
     route_retrieve as route_retrieve_pipeline,
 )
 from paper_rag.pipeline.service import (
-    HYDE_NO_DOCS_MESSAGE,
-    build_no_docs_response,
+    ask_with_hyde as ask_with_hyde_service,
     fixed_llm_factory,
     format_conversation_history,
     generate_prepared_answer,
@@ -45,6 +44,7 @@ from paper_rag.pipeline.service import (
     prepare_pipeline_context,
     reformulate_question,
     resolve_stream_llm,
+    route_question as route_question_service,
     stream_prepared_answer_events,
     stream_retrieval_events,
     stream_rewrite_events,
@@ -288,11 +288,14 @@ def route_question(
     - 概述型 / 对比型 → 混合检索
     - 其他 → HyDE 增强检索
     """
-    docs, _ = _route_retrieve(hybrid, question, llm_model, temperature)
-    if not docs:
-        return build_no_docs_response()
-    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature, hybrid=hybrid)
-    return answer, docs
+    return route_question_service(
+        hybrid=hybrid,
+        question=question,
+        llm_model=llm_model,
+        temperature=temperature,
+        route_retrieve_fn=_route_retrieve,
+        generate_answer_fn=_generate_answer,
+    )
 
 
 def ask_with_hyde(
@@ -302,11 +305,14 @@ def ask_with_hyde(
     temperature: float = TEMPERATURE,
 ):
     """带 HyDE 增强的问答，返回答案和检索到的源文档"""
-    docs = _retrieve_with_hyde(hybrid, question, llm_model, temperature)
-    if not docs:
-        return build_no_docs_response(HYDE_NO_DOCS_MESSAGE)
-    answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature, hybrid=hybrid)
-    return answer, docs
+    return ask_with_hyde_service(
+        hybrid=hybrid,
+        question=question,
+        llm_model=llm_model,
+        temperature=temperature,
+        hyde_retrieve_fn=_retrieve_with_hyde,
+        generate_answer_fn=_generate_answer,
+    )
 
 
 # ── 多轮对话 ──────────────────────────────────────────

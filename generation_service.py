@@ -1,3 +1,5 @@
+"""兼容薄壳：新代码请从 paper_rag.generation.service 导入。"""
+
 from paper_rag.generation.service import (
     ANSWER_ORDER_INSTRUCTION,
     LLM_DISCONNECTED_MESSAGE,

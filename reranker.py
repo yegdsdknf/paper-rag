@@ -1,3 +1,5 @@
+"""兼容薄壳：新代码请从 paper_rag.retrieval.reranker 导入。"""
+
 from langchain_core.documents import Document
 
 from paper_rag.retrieval.reranker import Reranker, get_reranker as _get_reranker

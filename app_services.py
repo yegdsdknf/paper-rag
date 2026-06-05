@@ -1,3 +1,5 @@
+"""兼容薄壳：新代码请从 paper_rag.ui.services 导入。"""
+
 from paper_rag.ui.services import (
     StreamAnswerResult,
     build_feedback_payload,
