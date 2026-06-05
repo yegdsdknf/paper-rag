@@ -25,7 +25,6 @@ from paper_rag.generation.service import (
     format_docs as format_generation_docs,
     generate_answer,
     generate_answer_from_docs,
-    stream_answer_from_docs,
     stream_answer_tokens,
 )
 from paper_rag.observability.service import write_query_log
@@ -43,9 +42,9 @@ from paper_rag.pipeline.service import (
     handle_no_docs_response,
     prepare_pipeline_context,
     reformulate_question,
+    stream_prepared_answer_events,
     stream_retrieval_events,
     stream_rewrite_events,
-    stream_token_events,
     write_pipeline_query_log,
     write_rewrite_notice,
     write_successful_response_log,
@@ -460,22 +459,20 @@ def ask_stream(
             yield event
         return
 
-    for event in stream_token_events(
-        stream_answer_from_docs(
-            question=question,
-            docs=docs,
-            history_text=history_text,
-            llm_model=llm_model,
-            temperature=temperature,
-            hybrid=hybrid,
-            settings=_get_settings(),
-            prepared_context_docs=pipeline_context.context_docs,
-            prepare_docs_fn=prepare_docs_for_context,
-            format_docs_fn=_format_docs,
-            load_prompt_fn=load_prompt,
-            get_llm_fn=lambda _model, _temperature: llm,
-            stream_answer_tokens_fn=stream_answer_tokens,
-        )
+    for event in stream_prepared_answer_events(
+        question=question,
+        docs=docs,
+        history_text=history_text,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+        settings=_get_settings(),
+        prepared_context_docs=pipeline_context.context_docs,
+        prepare_docs_fn=prepare_docs_for_context,
+        format_docs_fn=_format_docs,
+        load_prompt_fn=load_prompt,
+        get_llm_fn=lambda _model, _temperature: llm,
+        stream_answer_tokens_fn=stream_answer_tokens,
     ):
         yield event
 

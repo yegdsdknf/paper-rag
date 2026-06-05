@@ -241,6 +241,38 @@ class PipelineServiceTest(unittest.TestCase):
             ],
         )
 
+    def test_stream_prepared_answer_events_wraps_generation_tokens(self):
+        from paper_rag.pipeline.service import stream_prepared_answer_events
+
+        calls = []
+
+        def stream_answer_from_docs(**kwargs):
+            calls.append(kwargs)
+            return ["ans", "wer"]
+
+        events = list(
+            stream_prepared_answer_events(
+                question="question",
+                docs=["doc"],
+                history_text="history",
+                llm_model="qwen2.5:3b",
+                temperature=0.1,
+                hybrid="hybrid",
+                settings="settings",
+                prepared_context_docs=["prepared"],
+                prepare_docs_fn="prepare-docs",
+                format_docs_fn="format-docs",
+                load_prompt_fn="load-prompt",
+                get_llm_fn="get-llm",
+                stream_answer_tokens_fn="stream-tokens",
+                stream_answer_from_docs_fn=stream_answer_from_docs,
+            )
+        )
+
+        self.assertEqual(events, [{"type": "token", "data": "ans"}, {"type": "token", "data": "wer"}])
+        self.assertEqual(calls[0]["prepared_context_docs"], ["prepared"])
+        self.assertEqual(calls[0]["stream_answer_tokens_fn"], "stream-tokens")
+
     def test_stream_retrieval_events_wraps_route_and_docs(self):
         from paper_rag.pipeline.service import stream_retrieval_events
 

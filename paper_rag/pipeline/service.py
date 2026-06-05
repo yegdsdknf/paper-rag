@@ -196,6 +196,48 @@ def stream_token_events(tokens: Any) -> Any:
         yield {"type": "token", "data": token}
 
 
+def stream_prepared_answer_events(
+    *,
+    question: str,
+    docs: list[Any],
+    history_text: str,
+    llm_model: str,
+    temperature: float,
+    hybrid: Any,
+    settings: Any,
+    prepared_context_docs: list[Any],
+    prepare_docs_fn: Any,
+    format_docs_fn: Any,
+    load_prompt_fn: Any,
+    get_llm_fn: Any,
+    stream_answer_tokens_fn: Any,
+    stream_answer_from_docs_fn: Callable[..., Any] | None = None,
+) -> Any:
+    """调用生成层流式回答，并包装为 ask_stream 的 token 事件。"""
+    if stream_answer_from_docs_fn is None:
+        from paper_rag.generation.service import stream_answer_from_docs
+
+        stream_answer_from_docs_fn = stream_answer_from_docs
+
+    yield from stream_token_events(
+        stream_answer_from_docs_fn(
+            question=question,
+            docs=docs,
+            history_text=history_text,
+            llm_model=llm_model,
+            temperature=temperature,
+            hybrid=hybrid,
+            settings=settings,
+            prepared_context_docs=prepared_context_docs,
+            prepare_docs_fn=prepare_docs_fn,
+            format_docs_fn=format_docs_fn,
+            load_prompt_fn=load_prompt_fn,
+            get_llm_fn=get_llm_fn,
+            stream_answer_tokens_fn=stream_answer_tokens_fn,
+        )
+    )
+
+
 def stream_retrieval_events(route: str, docs: list[Any]) -> Any:
     """将检索策略和检索结果包装为 ask_stream 的前置事件。"""
     yield {"type": "route", "data": route}

@@ -625,6 +625,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.stream_rewrite_events`，将流式入口的多轮改写事件包装从 `rag_pipeline.ask_stream` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.write_rewrite_notice`，将非流式入口的问题改写提示输出迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
 | 已完成 | 新增 `paper_rag.pipeline.service.build_no_docs_response`，将兼容入口的无文档 tuple 返回构造迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_app_services` |
+| 已完成 | 新增 `paper_rag.pipeline.service.stream_prepared_answer_events`，将流式生成层调用与 token 事件包装迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_ui_streaming` |
 
 **建议拆分**
 
