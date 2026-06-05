@@ -5,7 +5,7 @@ from paper_rag.pipeline.retrieval import (
     retrieve_with_hyde,
     route_retrieve,
 )
-from paper_rag.pipeline.service import ReformulationResult, reformulate_question
+from paper_rag.pipeline.service import ReformulationResult, reformulate_question, write_pipeline_query_log
 
 __all__ = [
     "MultiQueryRetrievalResult",
@@ -15,4 +15,5 @@ __all__ = [
     "retrieve_with_hyde",
     "reformulate_question",
     "route_retrieve",
+    "write_pipeline_query_log",
 ]

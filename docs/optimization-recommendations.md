@@ -615,6 +615,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 将非流式答案生成编排迁入 `paper_rag.generation.service.generate_answer_from_docs`；`rag_pipeline._generate_answer` 保留为注入当前配置的兼容入口 | `.\.venv\Scripts\python.exe -m unittest tests.test_generation_service tests.test_context_compression tests.test_parent_retrieval tests.test_query_logger tests.test_package_imports` |
 | 已完成 | 将流式 token 生成编排迁入 `paper_rag.generation.service.stream_answer_from_docs`；`rag_pipeline.ask_stream` 继续负责事件顺序、日志和 LLM 不可用错误记录 | `.\.venv\Scripts\python.exe -m unittest tests.test_generation_service tests.test_query_logger tests.test_package_imports` |
 | 已完成 | 新增 `paper_rag.pipeline.service.reformulate_question`，统一非流式和流式入口的多轮追问改写决策；`rag_pipeline` 继续负责打印、事件和日志 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
+| 已完成 | 新增 `paper_rag.pipeline.service.write_pipeline_query_log`，将 mixed route 的 query expansion trace 选择逻辑从 `rag_pipeline._write_query_log` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger` |
 
 **建议拆分**
 

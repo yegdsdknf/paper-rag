@@ -37,7 +37,7 @@ from paper_rag.pipeline.retrieval import (
     retrieve_with_hyde as retrieve_with_hyde_pipeline,
     route_retrieve as route_retrieve_pipeline,
 )
-from paper_rag.pipeline.service import reformulate_question
+from paper_rag.pipeline.service import reformulate_question, write_pipeline_query_log
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
     expand_query,
@@ -135,8 +135,7 @@ def _write_query_log(
     context_stats: dict | None = None,
     error: str | None = None,
 ) -> None:
-    trace = _query_expansion_trace if route.startswith("mixed") else {"variants": [], "rejections": []}
-    write_query_log(
+    write_pipeline_query_log(
         settings=_get_settings(),
         question=question,
         standalone_question=standalone_question,
@@ -145,10 +144,10 @@ def _write_query_log(
         docs=docs,
         elapsed=elapsed,
         embedding_device_fn=_get_embedding_device,
-        query_variants=trace["variants"],
-        query_variant_rejections=trace["rejections"],
+        query_trace=_query_expansion_trace,
         context_stats=context_stats,
         error=error,
+        write_query_log_fn=write_query_log,
     )
 
 

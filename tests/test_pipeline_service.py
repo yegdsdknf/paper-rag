@@ -46,6 +46,59 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertFalse(result.rewritten)
         self.assertEqual(conversation.reformulate_calls, ["same question"])
 
+    def test_write_pipeline_query_log_includes_trace_for_mixed_route(self):
+        from paper_rag.pipeline.service import write_pipeline_query_log
+
+        calls = []
+
+        write_pipeline_query_log(
+            settings="settings",
+            question="original",
+            standalone_question="standalone",
+            route="mixed:expanded",
+            llm_model="qwen2.5:3b",
+            docs=["doc"],
+            elapsed={"total": 1.0},
+            embedding_device_fn="device-fn",
+            query_trace={
+                "variants": ["variant"],
+                "rejections": [{"variant": "bad", "reason": "too_distant"}],
+            },
+            context_stats={"input_chars": 10},
+            write_query_log_fn=lambda **kwargs: calls.append(kwargs),
+        )
+
+        self.assertEqual(calls[0]["settings"], "settings")
+        self.assertEqual(calls[0]["query_variants"], ["variant"])
+        self.assertEqual(calls[0]["query_variant_rejections"], [{"variant": "bad", "reason": "too_distant"}])
+        self.assertEqual(calls[0]["context_stats"], {"input_chars": 10})
+
+    def test_write_pipeline_query_log_clears_trace_for_non_mixed_route(self):
+        from paper_rag.pipeline.service import write_pipeline_query_log
+
+        calls = []
+
+        write_pipeline_query_log(
+            settings="settings",
+            question="original",
+            standalone_question="standalone",
+            route="hyde",
+            llm_model="qwen2.5:3b",
+            docs=[],
+            elapsed={"total": 1.0},
+            embedding_device_fn="device-fn",
+            query_trace={
+                "variants": ["variant"],
+                "rejections": [{"variant": "bad", "reason": "too_distant"}],
+            },
+            error="LLM unavailable",
+            write_query_log_fn=lambda **kwargs: calls.append(kwargs),
+        )
+
+        self.assertEqual(calls[0]["query_variants"], [])
+        self.assertEqual(calls[0]["query_variant_rejections"], [])
+        self.assertEqual(calls[0]["error"], "LLM unavailable")
+
 
 if __name__ == "__main__":
     unittest.main()
