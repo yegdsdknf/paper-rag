@@ -155,3 +155,9 @@ def stream_token_events(tokens: Any) -> Any:
     """将生成层文本 token 包装为 ask_stream 的事件格式。"""
     for token in tokens:
         yield {"type": "token", "data": token}
+
+
+def stream_retrieval_events(route: str, docs: list[Any]) -> Any:
+    """将检索策略和检索结果包装为 ask_stream 的前置事件。"""
+    yield {"type": "route", "data": route}
+    yield {"type": "docs", "data": docs}

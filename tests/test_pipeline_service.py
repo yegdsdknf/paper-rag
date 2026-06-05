@@ -204,6 +204,20 @@ class PipelineServiceTest(unittest.TestCase):
             ],
         )
 
+    def test_stream_retrieval_events_wraps_route_and_docs(self):
+        from paper_rag.pipeline.service import stream_retrieval_events
+
+        docs = ["doc"]
+        events = list(stream_retrieval_events("mixed", docs))
+
+        self.assertEqual(
+            events,
+            [
+                {"type": "route", "data": "mixed"},
+                {"type": "docs", "data": docs},
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

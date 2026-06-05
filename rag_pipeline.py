@@ -41,6 +41,7 @@ from paper_rag.pipeline.service import (
     handle_no_docs_response,
     prepare_pipeline_context,
     reformulate_question,
+    stream_retrieval_events,
     stream_token_events,
     write_pipeline_query_log,
 )
@@ -408,8 +409,8 @@ def ask_stream(
     retrieve_start = timer.start_stage()
     docs, strategy = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
     retrieve_elapsed = timer.elapsed_since(retrieve_start)
-    yield {"type": "route", "data": strategy}
-    yield {"type": "docs", "data": docs}
+    for event in stream_retrieval_events(strategy, docs):
+        yield event
 
     if not docs:
         for event in handle_no_docs_response(

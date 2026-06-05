@@ -15,6 +15,7 @@ from paper_rag.pipeline.service import (
     handle_no_docs_response,
     prepare_pipeline_context,
     reformulate_question,
+    stream_retrieval_events,
     stream_token_events,
     write_pipeline_query_log,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "retrieve_with_hyde",
     "reformulate_question",
     "route_retrieve",
+    "stream_retrieval_events",
     "stream_token_events",
     "write_pipeline_query_log",
 ]
