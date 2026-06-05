@@ -37,6 +37,7 @@ from paper_rag.pipeline.retrieval import (
     retrieve_with_hyde as retrieve_with_hyde_pipeline,
     route_retrieve as route_retrieve_pipeline,
 )
+from paper_rag.pipeline.service import reformulate_question
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
     expand_query,
@@ -312,9 +313,10 @@ def ask_with_context(
     """
     timer = TraceTimer()
     rewrite_start = timer.start_stage()
-    standalone_q = conversation.reformulate(question)
+    rewrite_result = reformulate_question(conversation, question, require_history=False)
+    standalone_q = rewrite_result.standalone_question
     rewrite_elapsed = timer.elapsed_since(rewrite_start)
-    if standalone_q != question:
+    if rewrite_result.rewritten:
         print(f'🔄 改写追问: "{standalone_q}"')
 
     retrieve_start = timer.start_stage()
@@ -385,12 +387,10 @@ def ask_stream(
     timer = TraceTimer()
     # Step 1: 改写追问（多轮时）
     rewrite_start = timer.start_stage()
-    if conversation.history:
-        standalone_q = conversation.reformulate(question)
-        if standalone_q != question:
-            yield {"type": "rewrite", "data": standalone_q}
-    else:
-        standalone_q = question
+    rewrite_result = reformulate_question(conversation, question, require_history=True)
+    standalone_q = rewrite_result.standalone_question
+    if rewrite_result.rewritten:
+        yield {"type": "rewrite", "data": standalone_q}
     rewrite_elapsed = timer.elapsed_since(rewrite_start)
 
     # Step 2: 路由检索（统一入口）
