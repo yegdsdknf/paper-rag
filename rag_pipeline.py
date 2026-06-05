@@ -45,6 +45,7 @@ from paper_rag.pipeline.service import (
     stream_rewrite_events,
     stream_token_events,
     write_pipeline_query_log,
+    write_rewrite_notice,
     write_successful_response_log,
 )
 from paper_rag.retrieval.hybrid import HybridRetriever
@@ -324,8 +325,7 @@ def ask_with_context(
     rewrite_result = reformulate_question(conversation, question, require_history=False)
     standalone_q = rewrite_result.standalone_question
     rewrite_elapsed = timer.elapsed_since(rewrite_start)
-    if rewrite_result.rewritten:
-        print(f'🔄 改写追问: "{standalone_q}"')
+    write_rewrite_notice(rewrite_result)
 
     retrieve_start = timer.start_stage()
     docs, route = _route_retrieve(hybrid, standalone_q, llm_model, temperature)

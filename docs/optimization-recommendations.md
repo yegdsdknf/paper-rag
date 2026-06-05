@@ -623,6 +623,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.stream_retrieval_events`，将流式入口的 route/docs 前置事件包装从 `rag_pipeline.ask_stream` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.write_successful_response_log`，将非流式与流式成功生成后的 query log 字段拼装迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.stream_rewrite_events`，将流式入口的多轮改写事件包装从 `rag_pipeline.ask_stream` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
+| 已完成 | 新增 `paper_rag.pipeline.service.write_rewrite_notice`，将非流式入口的问题改写提示输出迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services` |
 
 **建议拆分**
 

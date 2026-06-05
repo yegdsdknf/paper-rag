@@ -46,6 +46,16 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertFalse(result.rewritten)
         self.assertEqual(conversation.reformulate_calls, ["same question"])
 
+    def test_write_rewrite_notice_prints_only_when_rewritten(self):
+        from paper_rag.pipeline.service import ReformulationResult, write_rewrite_notice
+
+        messages = []
+
+        write_rewrite_notice(ReformulationResult("standalone question", rewritten=True), print_fn=messages.append)
+        write_rewrite_notice(ReformulationResult("original question", rewritten=False), print_fn=messages.append)
+
+        self.assertEqual(messages, ['🔄 改写追问: "standalone question"'])
+
     def test_write_pipeline_query_log_includes_trace_for_mixed_route(self):
         from paper_rag.pipeline.service import write_pipeline_query_log
 

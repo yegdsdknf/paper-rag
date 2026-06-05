@@ -19,6 +19,7 @@ from paper_rag.pipeline.service import (
     stream_rewrite_events,
     stream_token_events,
     write_pipeline_query_log,
+    write_rewrite_notice,
     write_successful_response_log,
 )
 
@@ -41,5 +42,6 @@ __all__ = [
     "stream_rewrite_events",
     "stream_token_events",
     "write_pipeline_query_log",
+    "write_rewrite_notice",
     "write_successful_response_log",
 ]

@@ -38,6 +38,16 @@ def reformulate_question(
     )
 
 
+def write_rewrite_notice(
+    result: ReformulationResult,
+    *,
+    print_fn: Callable[[str], None] = print,
+) -> None:
+    """仅在问题被改写时输出非流式入口提示。"""
+    if result.rewritten:
+        print_fn(f'🔄 改写追问: "{result.standalone_question}"')
+
+
 def prepare_pipeline_context(
     *,
     question: str,
