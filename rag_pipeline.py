@@ -42,6 +42,7 @@ from paper_rag.pipeline.service import (
     prepare_pipeline_context,
     reformulate_question,
     stream_retrieval_events,
+    stream_rewrite_events,
     stream_token_events,
     write_pipeline_query_log,
     write_successful_response_log,
@@ -403,8 +404,8 @@ def ask_stream(
     rewrite_start = timer.start_stage()
     rewrite_result = reformulate_question(conversation, question, require_history=True)
     standalone_q = rewrite_result.standalone_question
-    if rewrite_result.rewritten:
-        yield {"type": "rewrite", "data": standalone_q}
+    for event in stream_rewrite_events(rewrite_result):
+        yield event
     rewrite_elapsed = timer.elapsed_since(rewrite_start)
 
     # Step 2: 路由检索（统一入口）

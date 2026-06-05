@@ -239,6 +239,15 @@ class PipelineServiceTest(unittest.TestCase):
             ],
         )
 
+    def test_stream_rewrite_events_wraps_only_rewritten_question(self):
+        from paper_rag.pipeline.service import ReformulationResult, stream_rewrite_events
+
+        events = list(stream_rewrite_events(ReformulationResult("standalone", rewritten=True)))
+        unchanged_events = list(stream_rewrite_events(ReformulationResult("original", rewritten=False)))
+
+        self.assertEqual(events, [{"type": "rewrite", "data": "standalone"}])
+        self.assertEqual(unchanged_events, [])
+
 
 if __name__ == "__main__":
     unittest.main()

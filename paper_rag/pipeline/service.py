@@ -184,3 +184,9 @@ def stream_retrieval_events(route: str, docs: list[Any]) -> Any:
     """将检索策略和检索结果包装为 ask_stream 的前置事件。"""
     yield {"type": "route", "data": route}
     yield {"type": "docs", "data": docs}
+
+
+def stream_rewrite_events(result: ReformulationResult) -> Any:
+    """仅在多轮改写发生时产出 rewrite 事件。"""
+    if result.rewritten:
+        yield {"type": "rewrite", "data": result.standalone_question}
