@@ -235,6 +235,11 @@ def generate_prepared_answer(
     )
 
 
+def fixed_llm_factory(llm: Any) -> Callable[[str, float], Any]:
+    """把已解析的 LLM 实例适配为生成层期望的工厂函数。"""
+    return lambda _model, _temperature: llm
+
+
 def stream_token_events(tokens: Any) -> Any:
     """将生成层文本 token 包装为 ask_stream 的事件格式。"""
     for token in tokens:

@@ -316,6 +316,14 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(calls[0]["prepared_context_docs"], ["prepared"])
         self.assertEqual(calls[0]["generate_answer_fn"], "generate-answer")
 
+    def test_fixed_llm_factory_ignores_requested_model_and_returns_bound_llm(self):
+        from paper_rag.pipeline.service import fixed_llm_factory
+
+        llm = object()
+        factory = fixed_llm_factory(llm)
+
+        self.assertIs(factory("other-model", 0.9), llm)
+
     def test_stream_retrieval_events_wraps_route_and_docs(self):
         from paper_rag.pipeline.service import stream_retrieval_events
 

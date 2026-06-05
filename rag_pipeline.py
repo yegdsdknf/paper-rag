@@ -37,6 +37,7 @@ from paper_rag.pipeline.retrieval import (
 from paper_rag.pipeline.service import (
     HYDE_NO_DOCS_MESSAGE,
     build_no_docs_response,
+    fixed_llm_factory,
     format_conversation_history,
     generate_prepared_answer,
     handle_llm_unavailable_response,
@@ -472,7 +473,7 @@ def ask_stream(
         prepare_docs_fn=prepare_docs_for_context,
         format_docs_fn=_format_docs,
         load_prompt_fn=load_prompt,
-        get_llm_fn=lambda _model, _temperature: llm,
+        get_llm_fn=fixed_llm_factory(llm),
         stream_answer_tokens_fn=stream_answer_tokens,
     ):
         yield event
