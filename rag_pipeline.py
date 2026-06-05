@@ -35,6 +35,7 @@ from paper_rag.pipeline.retrieval import (
     route_retrieve as route_retrieve_pipeline,
 )
 from paper_rag.pipeline.service import (
+    ask_with_context as ask_with_context_service,
     ask_with_hyde as ask_with_hyde_service,
     fixed_llm_factory,
     format_conversation_history,
@@ -49,7 +50,6 @@ from paper_rag.pipeline.service import (
     stream_retrieval_events,
     stream_rewrite_events,
     write_pipeline_query_log,
-    write_rewrite_notice,
     write_successful_response_log,
 )
 from paper_rag.retrieval.hybrid import HybridRetriever
@@ -330,58 +330,19 @@ def ask_with_context(
     2. 检索（对比/概述 → 混合 / 其他 → HyDE）
     3. 用原始问题 + 检索 + 历史生成连贯回答
     """
-    timer = TraceTimer()
-    rewrite_start = timer.start_stage()
-    rewrite_result = reformulate_question(conversation, question, require_history=False)
-    standalone_q = rewrite_result.standalone_question
-    rewrite_elapsed = timer.elapsed_since(rewrite_start)
-    write_rewrite_notice(rewrite_result)
-
-    retrieve_start = timer.start_stage()
-    docs, route = _route_retrieve(hybrid, standalone_q, llm_model, temperature)
-    retrieve_elapsed = timer.elapsed_since(retrieve_start)
-
-    if not docs:
-        return handle_no_docs_response(
-            question=question,
-            standalone_question=standalone_q,
-            route=route,
-            llm_model=llm_model,
-            elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
-            write_query_log_fn=_write_query_log,
-        )
-
-    history_text = format_conversation_history(conversation)
-    generate_start = timer.start_stage()
-    pipeline_context = prepare_pipeline_context(
-        question=question,
-        docs=docs,
+    return ask_with_context_service(
         hybrid=hybrid,
+        conversation=conversation,
+        question=question,
+        llm_model=llm_model,
+        temperature=temperature,
         settings=_get_settings(),
+        route_retrieve_fn=_route_retrieve,
+        generate_answer_fn=_generate_answer,
+        write_query_log_fn=_write_query_log,
         prepare_docs_fn=prepare_docs_for_context,
         build_stats_fn=build_context_stats,
     )
-    answer = _generate_answer(
-        question,
-        docs,
-        history_text,
-        llm_model=llm_model,
-        temperature=temperature,
-        hybrid=hybrid,
-        prepared_context_docs=pipeline_context.context_docs,
-    )
-    generate_elapsed = timer.elapsed_since(generate_start)
-    write_successful_response_log(
-        question=question,
-        standalone_question=standalone_q,
-        route=route,
-        llm_model=llm_model,
-        docs=docs,
-        elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, generate_elapsed),
-        context_stats=pipeline_context.context_stats,
-        write_query_log_fn=_write_query_log,
-    )
-    return answer, docs
 
 
 # ── 流式生成（Streamlit Web 调用入口）─────────────────

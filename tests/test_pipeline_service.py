@@ -17,6 +17,28 @@ class FakeConversation:
         return "formatted history"
 
 
+class FakeTimer:
+    def __init__(self):
+        self.durations = [0.1, 0.2, 0.3]
+        self.started = []
+
+    def start_stage(self):
+        marker = f"stage-{len(self.started)}"
+        self.started.append(marker)
+        return marker
+
+    def elapsed_since(self, _start):
+        return self.durations.pop(0)
+
+    def elapsed_map(self, rewrite, retrieve, generate):
+        return {
+            "rewrite": rewrite,
+            "retrieve": retrieve,
+            "generate": generate,
+            "total": round(rewrite + retrieve + generate, 3),
+        }
+
+
 class PipelineServiceTest(unittest.TestCase):
     def test_reformulate_question_can_force_rewrite_without_history(self):
         from paper_rag.pipeline.service import reformulate_question
@@ -235,6 +257,109 @@ class PipelineServiceTest(unittest.TestCase):
                 ("generate", "question", ["hyde-doc"], "qwen2.5:3b", 0.1, "hybrid"),
             ],
         )
+
+    def test_ask_with_context_generates_answer_and_writes_success_log(self):
+        from paper_rag.pipeline.service import ask_with_context
+
+        docs = ["doc"]
+        calls = []
+        logs = []
+        notices = []
+
+        def route_retrieve(hybrid, question, llm_model, temperature):
+            calls.append(("route", hybrid, question, llm_model, temperature))
+            return docs, "mixed"
+
+        def prepare_docs(question, input_docs, *, hybrid, settings):
+            calls.append(("prepare", question, input_docs, hybrid, settings))
+            return ["prepared-doc"]
+
+        def build_stats(input_docs, context_docs):
+            calls.append(("stats", input_docs, context_docs))
+            return {"input_chars": 10, "output_chars": 8}
+
+        def generate_answer(question, input_docs, history_text, *, llm_model, temperature, hybrid, prepared_context_docs):
+            calls.append(
+                (
+                    "generate",
+                    question,
+                    input_docs,
+                    history_text,
+                    llm_model,
+                    temperature,
+                    hybrid,
+                    prepared_context_docs,
+                )
+            )
+            return "answer"
+
+        result = ask_with_context(
+            hybrid="hybrid",
+            conversation=FakeConversation(rewritten="standalone question"),
+            question="follow up",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            settings="settings",
+            route_retrieve_fn=route_retrieve,
+            generate_answer_fn=generate_answer,
+            write_query_log_fn=lambda **kwargs: logs.append(kwargs),
+            prepare_docs_fn=prepare_docs,
+            build_stats_fn=build_stats,
+            timer_factory=FakeTimer,
+            print_fn=notices.append,
+        )
+
+        self.assertEqual(result, ("answer", docs))
+        self.assertEqual(notices, ['🔄 改写追问: "standalone question"'])
+        self.assertEqual(
+            calls,
+            [
+                ("route", "hybrid", "standalone question", "qwen2.5:3b", 0.1),
+                ("prepare", "follow up", docs, "hybrid", "settings"),
+                ("stats", docs, ["prepared-doc"]),
+                (
+                    "generate",
+                    "follow up",
+                    docs,
+                    "formatted history",
+                    "qwen2.5:3b",
+                    0.1,
+                    "hybrid",
+                    ["prepared-doc"],
+                ),
+            ],
+        )
+        self.assertEqual(logs[0]["question"], "follow up")
+        self.assertEqual(logs[0]["standalone_question"], "standalone question")
+        self.assertEqual(logs[0]["route"], "mixed")
+        self.assertEqual(logs[0]["context_stats"], {"input_chars": 10, "output_chars": 8})
+        self.assertEqual(logs[0]["elapsed"], {"rewrite": 0.1, "retrieve": 0.2, "generate": 0.3, "total": 0.6})
+
+    def test_ask_with_context_returns_no_docs_response_without_generating(self):
+        from paper_rag.pipeline.service import ask_with_context
+
+        logs = []
+
+        result = ask_with_context(
+            hybrid="hybrid",
+            conversation=FakeConversation(rewritten="standalone question"),
+            question="follow up",
+            llm_model="qwen2.5:3b",
+            temperature=0.1,
+            settings="settings",
+            route_retrieve_fn=lambda *_args: ([], "hyde"),
+            generate_answer_fn=lambda *_args, **_kwargs: self.fail("generation should be skipped"),
+            write_query_log_fn=lambda **kwargs: logs.append(kwargs),
+            prepare_docs_fn=lambda *_args, **_kwargs: self.fail("context preparation should be skipped"),
+            build_stats_fn=lambda *_args: self.fail("context stats should be skipped"),
+            timer_factory=FakeTimer,
+            print_fn=lambda _message: None,
+        )
+
+        self.assertEqual(result, ("❌ 未找到相关内容", []))
+        self.assertEqual(logs[0]["docs"], [])
+        self.assertEqual(logs[0]["route"], "hyde")
+        self.assertEqual(logs[0]["elapsed"], {"rewrite": 0.1, "retrieve": 0.2, "generate": 0.0, "total": 0.3})
 
     def test_handle_no_docs_response_can_return_stream_events(self):
         from paper_rag.pipeline.service import handle_no_docs_response

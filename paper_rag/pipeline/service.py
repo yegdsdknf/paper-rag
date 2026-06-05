@@ -171,6 +171,82 @@ def ask_with_hyde(
     return answer, docs
 
 
+def ask_with_context(
+    *,
+    hybrid: Any,
+    conversation: Any,
+    question: str,
+    llm_model: str,
+    temperature: float,
+    settings: Any,
+    route_retrieve_fn: Callable[[Any, str, str, float], tuple[list[Any], str]],
+    generate_answer_fn: Callable[..., str],
+    write_query_log_fn: Callable[..., None],
+    prepare_docs_fn: Callable[..., list[Any]] | None = None,
+    build_stats_fn: Callable[[list[Any], list[Any]], dict[str, Any]] | None = None,
+    timer_factory: Callable[[], Any] | None = None,
+    print_fn: Callable[[str], None] = print,
+) -> tuple[str, list[Any]]:
+    """非流式多轮问答编排，根目录 facade 只负责注入旧依赖。"""
+    if timer_factory is None:
+        from paper_rag.observability.trace import TraceTimer
+
+        timer_factory = TraceTimer
+
+    timer = timer_factory()
+    rewrite_start = timer.start_stage()
+    rewrite_result = reformulate_question(conversation, question, require_history=False)
+    standalone_question = rewrite_result.standalone_question
+    rewrite_elapsed = timer.elapsed_since(rewrite_start)
+    write_rewrite_notice(rewrite_result, print_fn=print_fn)
+
+    retrieve_start = timer.start_stage()
+    docs, route = route_retrieve_fn(hybrid, standalone_question, llm_model, temperature)
+    retrieve_elapsed = timer.elapsed_since(retrieve_start)
+
+    if not docs:
+        return handle_no_docs_response(
+            question=question,
+            standalone_question=standalone_question,
+            route=route,
+            llm_model=llm_model,
+            elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, 0.0),
+            write_query_log_fn=write_query_log_fn,
+        )
+
+    history_text = format_conversation_history(conversation)
+    generate_start = timer.start_stage()
+    pipeline_context = prepare_pipeline_context(
+        question=question,
+        docs=docs,
+        hybrid=hybrid,
+        settings=settings,
+        prepare_docs_fn=prepare_docs_fn,
+        build_stats_fn=build_stats_fn,
+    )
+    answer = generate_answer_fn(
+        question,
+        docs,
+        history_text,
+        llm_model=llm_model,
+        temperature=temperature,
+        hybrid=hybrid,
+        prepared_context_docs=pipeline_context.context_docs,
+    )
+    generate_elapsed = timer.elapsed_since(generate_start)
+    write_successful_response_log(
+        question=question,
+        standalone_question=standalone_question,
+        route=route,
+        llm_model=llm_model,
+        docs=docs,
+        elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, generate_elapsed),
+        context_stats=pipeline_context.context_stats,
+        write_query_log_fn=write_query_log_fn,
+    )
+    return answer, docs
+
+
 def handle_no_docs_response(
     *,
     question: str,
