@@ -18,6 +18,7 @@ from paper_rag.pipeline.service import (
     stream_retrieval_events,
     stream_token_events,
     write_pipeline_query_log,
+    write_successful_response_log,
 )
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     "stream_retrieval_events",
     "stream_token_events",
     "write_pipeline_query_log",
+    "write_successful_response_log",
 ]

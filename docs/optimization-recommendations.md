@@ -621,6 +621,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 新增 `paper_rag.pipeline.service.prepare_pipeline_context`，统一生成前上下文准备与 context stats 计算，供非流式和流式入口复用 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_context_builder tests.test_context_compression tests.test_parent_retrieval` |
 | 已完成 | 新增 `paper_rag.pipeline.service.stream_token_events`，将正常流式生成 token 的事件包装从 `rag_pipeline.ask_stream` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
 | 已完成 | 新增 `paper_rag.pipeline.service.stream_retrieval_events`，将流式入口的 route/docs 前置事件包装从 `rag_pipeline.ask_stream` 迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
+| 已完成 | 新增 `paper_rag.pipeline.service.write_successful_response_log`，将非流式与流式成功生成后的 query log 字段拼装迁入包内 | `.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_service tests.test_query_logger tests.test_app_services tests.test_ui_streaming` |
 
 **建议拆分**
 

@@ -157,6 +157,27 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(log_calls[0]["context_stats"], {"input_chars": 20})
         self.assertEqual(log_calls[0]["error"], "LLM 模型未连接")
 
+    def test_write_successful_response_log_writes_context_stats_without_error(self):
+        from paper_rag.pipeline.service import write_successful_response_log
+
+        log_calls = []
+
+        write_successful_response_log(
+            question="original",
+            standalone_question="standalone",
+            route="mixed",
+            llm_model="qwen2.5:3b",
+            docs=["doc"],
+            elapsed={"total": 0.8},
+            context_stats={"input_chars": 20},
+            write_query_log_fn=lambda **kwargs: log_calls.append(kwargs),
+        )
+
+        self.assertEqual(log_calls[0]["question"], "original")
+        self.assertEqual(log_calls[0]["docs"], ["doc"])
+        self.assertEqual(log_calls[0]["context_stats"], {"input_chars": 20})
+        self.assertNotIn("error", log_calls[0])
+
     def test_prepare_pipeline_context_returns_prepared_docs_and_stats(self):
         from paper_rag.pipeline.service import prepare_pipeline_context
 

@@ -151,6 +151,29 @@ def handle_llm_unavailable_response(
     return [{"type": "token", "data": LLM_STREAM_DISCONNECTED_MESSAGE}]
 
 
+def write_successful_response_log(
+    *,
+    question: str,
+    standalone_question: str,
+    route: str,
+    llm_model: str,
+    docs: list[Any],
+    elapsed: dict[str, float],
+    context_stats: dict[str, Any],
+    write_query_log_fn: Callable[..., None],
+) -> None:
+    """统一成功生成后的日志写入，避免入口层重复拼装字段。"""
+    write_query_log_fn(
+        question=question,
+        standalone_question=standalone_question,
+        route=route,
+        llm_model=llm_model,
+        docs=docs,
+        elapsed=elapsed,
+        context_stats=context_stats,
+    )
+
+
 def stream_token_events(tokens: Any) -> Any:
     """将生成层文本 token 包装为 ask_stream 的事件格式。"""
     for token in tokens:

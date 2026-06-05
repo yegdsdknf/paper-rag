@@ -44,6 +44,7 @@ from paper_rag.pipeline.service import (
     stream_retrieval_events,
     stream_token_events,
     write_pipeline_query_log,
+    write_successful_response_log,
 )
 from paper_rag.retrieval.hybrid import HybridRetriever
 from paper_rag.retrieval.query_expansion import (
@@ -359,7 +360,7 @@ def ask_with_context(
         prepared_context_docs=pipeline_context.context_docs,
     )
     generate_elapsed = timer.elapsed_since(generate_start)
-    _write_query_log(
+    write_successful_response_log(
         question=question,
         standalone_question=standalone_q,
         route=route,
@@ -367,6 +368,7 @@ def ask_with_context(
         docs=docs,
         elapsed=timer.elapsed_map(rewrite_elapsed, retrieve_elapsed, generate_elapsed),
         context_stats=pipeline_context.context_stats,
+        write_query_log_fn=_write_query_log,
     )
     return answer, docs
 
@@ -474,7 +476,7 @@ def ask_stream(
     ):
         yield event
 
-    _write_query_log(
+    write_successful_response_log(
         question=question,
         standalone_question=standalone_q,
         route=strategy,
@@ -486,6 +488,7 @@ def ask_stream(
             timer.elapsed_since(generate_start),
         ),
         context_stats=pipeline_context.context_stats,
+        write_query_log_fn=_write_query_log,
     )
 
 
