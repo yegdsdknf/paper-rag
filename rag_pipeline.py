@@ -37,6 +37,8 @@ from paper_rag.pipeline.retrieval import (
     route_retrieve as route_retrieve_pipeline,
 )
 from paper_rag.pipeline.service import (
+    HYDE_NO_DOCS_MESSAGE,
+    build_no_docs_response,
     handle_llm_unavailable_response,
     handle_no_docs_response,
     prepare_pipeline_context,
@@ -286,7 +288,7 @@ def route_question(
     """
     docs, _ = _route_retrieve(hybrid, question, llm_model, temperature)
     if not docs:
-        return "❌ 未找到相关内容", []
+        return build_no_docs_response()
     answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature, hybrid=hybrid)
     return answer, docs
 
@@ -300,7 +302,7 @@ def ask_with_hyde(
     """带 HyDE 增强的问答，返回答案和检索到的源文档"""
     docs = _retrieve_with_hyde(hybrid, question, llm_model, temperature)
     if not docs:
-        return "❌ HyDE 检索未找到相关内容", []
+        return build_no_docs_response(HYDE_NO_DOCS_MESSAGE)
     answer = _generate_answer(question, docs, llm_model=llm_model, temperature=temperature, hybrid=hybrid)
     return answer, docs
 

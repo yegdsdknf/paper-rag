@@ -6,11 +6,13 @@ from paper_rag.pipeline.retrieval import (
     route_retrieve,
 )
 from paper_rag.pipeline.service import (
+    HYDE_NO_DOCS_MESSAGE,
     LLM_DISCONNECTED_ERROR,
     LLM_STREAM_DISCONNECTED_MESSAGE,
     NO_DOCS_MESSAGE,
     PipelineContext,
     ReformulationResult,
+    build_no_docs_response,
     handle_llm_unavailable_response,
     handle_no_docs_response,
     prepare_pipeline_context,
@@ -24,12 +26,14 @@ from paper_rag.pipeline.service import (
 )
 
 __all__ = [
+    "HYDE_NO_DOCS_MESSAGE",
     "LLM_DISCONNECTED_ERROR",
     "LLM_STREAM_DISCONNECTED_MESSAGE",
     "MultiQueryRetrievalResult",
     "NO_DOCS_MESSAGE",
     "PipelineContext",
     "ReformulationResult",
+    "build_no_docs_response",
     "handle_llm_unavailable_response",
     "handle_no_docs_response",
     "prepare_pipeline_context",

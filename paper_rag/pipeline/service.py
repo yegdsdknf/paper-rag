@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 
 NO_DOCS_MESSAGE = "❌ 未找到相关内容"
+HYDE_NO_DOCS_MESSAGE = "❌ HyDE 检索未找到相关内容"
 LLM_STREAM_DISCONNECTED_MESSAGE = "❌ LLM 模型未连接"
 LLM_DISCONNECTED_ERROR = "LLM 模型未连接"
 
@@ -112,6 +113,11 @@ def write_pipeline_query_log(
     )
 
 
+def build_no_docs_response(message: str = NO_DOCS_MESSAGE) -> tuple[str, list[Any]]:
+    """构造兼容入口使用的无文档响应。"""
+    return message, []
+
+
 def handle_no_docs_response(
     *,
     question: str,
@@ -133,7 +139,7 @@ def handle_no_docs_response(
     )
     if stream:
         return [{"type": "token", "data": NO_DOCS_MESSAGE}]
-    return NO_DOCS_MESSAGE, []
+    return build_no_docs_response()
 
 
 def handle_llm_unavailable_response(

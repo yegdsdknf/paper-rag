@@ -127,6 +127,12 @@ class PipelineServiceTest(unittest.TestCase):
         self.assertEqual(log_calls[0]["docs"], [])
         self.assertEqual(log_calls[0]["route"], "hyde")
 
+    def test_build_no_docs_response_returns_message_and_empty_docs(self):
+        from paper_rag.pipeline.service import build_no_docs_response
+
+        self.assertEqual(build_no_docs_response(), ("❌ 未找到相关内容", []))
+        self.assertEqual(build_no_docs_response("custom empty"), ("custom empty", []))
+
     def test_handle_no_docs_response_can_return_stream_events(self):
         from paper_rag.pipeline.service import handle_no_docs_response
 
