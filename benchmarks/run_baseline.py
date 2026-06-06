@@ -130,7 +130,7 @@ def run_baseline(
         _ensure_project_importable()
         from conversation import ConversationManager
         import rag_pipeline
-        from source_utils import sources_from_docs
+        from paper_rag.observability.sources import sources_from_docs
         from utils.config_loader import load_config
 
         config = load_config()

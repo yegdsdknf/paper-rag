@@ -57,12 +57,16 @@ class PackageModuleMigrationTest(unittest.TestCase):
             Path("paper_rag/retrieval/router.py"),
             Path("paper_rag/ui/__init__.py"),
             Path("paper_rag/ui/services.py"),
+            Path("app.py"),
+            Path("benchmarks/run_baseline.py"),
             Path("rag_pipeline.py"),
             Path("build_knowledge.py"),
         ]
         forbidden = [
             "from app_state import",
+            "from app_services import",
             "from feedback import",
+            "from source_utils import",
             "from context_compression import",
             "from hybrid_retriever import",
             "from parent_retrieval import",
