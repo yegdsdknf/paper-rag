@@ -95,6 +95,113 @@ class FriendlyErrorTest(unittest.TestCase):
         self.assertIn(("markdown", "- 运行 ollama serve"), fake.calls)
         self.assertIn(("expander", "技术详情"), fake.calls)
 
+    def test_render_streamlit_diagnostics_uses_doctor_report_model(self):
+        from paper_rag.config.diagnostics import DiagnosticCheck, build_report
+        from paper_rag.ui.errors import render_streamlit_diagnostics
+
+        class FakeStreamlit:
+            def __init__(self):
+                self.calls = []
+
+            def markdown(self, text):
+                self.calls.append(("markdown", text))
+
+            def expander(self, title):
+                self.calls.append(("expander", title))
+                return self
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        report = build_report(
+            [
+                DiagnosticCheck(
+                    "ollama.service",
+                    "Ollama 服务",
+                    "ERROR",
+                    "Ollama 服务不可用",
+                    suggestion="运行 ollama serve。",
+                    elapsed_sec=0.2,
+                ),
+                DiagnosticCheck(
+                    "index.manifest",
+                    "索引 Manifest",
+                    "WARN",
+                    "未找到 index_manifest.json",
+                    suggestion="重新运行 python main.py build。",
+                    elapsed_sec=0.1,
+                ),
+            ],
+            {"persist_directory": "chroma_db"},
+        )
+
+        fake = FakeStreamlit()
+        render_streamlit_diagnostics(fake, report)
+
+        rendered = "\n".join(text for kind, text in fake.calls if kind == "markdown")
+        self.assertIn("Doctor 诊断摘要", rendered)
+        self.assertIn("ERROR", rendered)
+        self.assertIn("Ollama 服务不可用", rendered)
+        self.assertIn("运行 ollama serve", rendered)
+        self.assertIn("index.manifest", rendered)
+        self.assertIn(("expander", "Doctor 检查详情"), fake.calls)
+
+    def test_render_streamlit_startup_failure_renders_error_and_doctor_report(self):
+        from paper_rag.config.diagnostics import DiagnosticCheck, build_report
+        from paper_rag.ui.errors import render_streamlit_startup_failure
+
+        class FakeStreamlit:
+            def __init__(self):
+                self.calls = []
+
+            def error(self, text):
+                self.calls.append(("error", text))
+
+            def warning(self, text):
+                self.calls.append(("warning", text))
+
+            def markdown(self, text):
+                self.calls.append(("markdown", text))
+
+            def expander(self, title):
+                self.calls.append(("expander", title))
+                return self
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        report = build_report(
+            [
+                DiagnosticCheck(
+                    "path.persist_directory",
+                    "向量库目录",
+                    "ERROR",
+                    "向量库目录不存在",
+                    suggestion="先运行 python main.py build。",
+                )
+            ],
+            {"persist_directory": "missing"},
+        )
+
+        fake = FakeStreamlit()
+        render_streamlit_startup_failure(
+            fake,
+            RuntimeError("collection is empty"),
+            diagnostics_runner=lambda project_root=None: report,
+            project_root="C:/project",
+        )
+
+        rendered = "\n".join(text for kind, text in fake.calls if kind == "markdown")
+        self.assertIn(("error", "向量库未构建或为空"), fake.calls)
+        self.assertIn("Doctor 诊断摘要", rendered)
+        self.assertIn("向量库目录不存在", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

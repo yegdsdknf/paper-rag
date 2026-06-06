@@ -121,3 +121,53 @@ def render_streamlit_error(st_module: Any, friendly_error: FriendlyError) -> Non
     if friendly_error.details:
         with st_module.expander("技术详情"):
             st_module.markdown(f"`{friendly_error.details}`")
+
+
+def render_streamlit_diagnostics(st_module: Any, report: Any) -> None:
+    """在 Streamlit 初始化失败页展示 doctor 诊断报告摘要。"""
+    st_module.markdown("**Doctor 诊断摘要：**")
+    summary = report.summary
+    st_module.markdown(
+        f"- 状态：{report.status}，"
+        f"ERROR={summary.get('ERROR', 0)}，"
+        f"WARN={summary.get('WARN', 0)}，"
+        f"OK={summary.get('OK', 0)}"
+    )
+
+    actionable = [check for check in report.checks if check.status in {"ERROR", "WARN"}]
+    if actionable:
+        st_module.markdown("**需要优先处理：**")
+        for check in actionable:
+            st_module.markdown(f"- [{check.status}] {check.title}: {check.message}")
+            if check.suggestion:
+                st_module.markdown(f"  - {check.suggestion}")
+    else:
+        st_module.markdown("- 未发现阻断项；请展开详情查看完整检查结果。")
+
+    with st_module.expander("Doctor 检查详情"):
+        for check in report.checks:
+            line = f"- [{check.status}] `{check.id}` {check.title}: {check.message} ({check.elapsed_sec:.2f}s)"
+            st_module.markdown(line)
+            if check.suggestion:
+                st_module.markdown(f"  - 建议：{check.suggestion}")
+
+
+def render_streamlit_startup_failure(
+    st_module: Any,
+    error: Exception,
+    *,
+    diagnostics_runner: Any | None = None,
+    project_root: Any | None = None,
+) -> None:
+    """渲染初始化失败页，并尽量附带 doctor 诊断报告。"""
+    render_streamlit_error(st_module, format_runtime_error(error))
+    try:
+        if diagnostics_runner is None:
+            from paper_rag.config.diagnostics import run_diagnostics
+
+            diagnostics_runner = run_diagnostics
+        report = diagnostics_runner(project_root=project_root)
+        render_streamlit_diagnostics(st_module, report)
+    except Exception as diagnostic_error:
+        with st_module.expander("Doctor 诊断未完成"):
+            st_module.markdown(f"`{type(diagnostic_error).__name__}: {diagnostic_error}`")

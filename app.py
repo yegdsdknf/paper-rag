@@ -11,6 +11,7 @@ from paper_rag.ui import (
     clear_conversation_state,
     format_runtime_error,
     render_streamlit_error,
+    render_streamlit_startup_failure,
     save_feedback_from_payload,
     save_uploaded_pdfs,
 )
@@ -76,7 +77,7 @@ try:
     hybrid, cfg, ask_stream, CM = _init()
 except Exception as e:
     st.title("📚 论文知识库问答系统")
-    render_streamlit_error(st, format_runtime_error(e))
+    render_streamlit_startup_failure(st, e, project_root=PROJECT_ROOT)
     st.stop()
 
 

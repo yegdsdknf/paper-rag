@@ -12,9 +12,9 @@
 |---|---|---|
 | 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config、runtime、pipeline 等主要实现；根目录同类模块已降级为兼容薄壳，并补充 deprecation 指引与测试保护 | 已进入兼容壳退场策略阶段 |
 | 主链路编排 | `rag_pipeline.py` 仍是旧公开入口；运行时、检索、生成、日志、单轮兼容入口、非流式多轮入口和流式入口编排已迁入包内，根文件主要负责旧签名、patch 兼容和依赖注入 | 已接近纯 facade，后续重点是兼容壳退场策略 |
-| 配置管理 | `RagSettings.from_mapping()`、`main.py doctor --json`、启动诊断数据模型和 formatter 已落地 | 后续可把 doctor 数据模型接入 Streamlit 初始化失败页 |
+| 配置管理 | `RagSettings.from_mapping()`、`main.py doctor --json`、启动诊断数据模型、formatter 和 Streamlit 初始化失败页诊断摘要已落地 | 后续可继续让 CLI/build 复用统一 formatter |
 | 检索能力 | 已具备混合检索、BM25 持久化、动态权重、HyDE、Query Expansion 质量过滤、Rerank 阈值、Parent Retrieval、Context Compression 和语义原型缓存 | 主线优化基本完成，后续重点是校准和体验 |
-| Web UI | Streamlit 页面已有流式刷新节流、友好错误、来源 view model、页码/分数/高亮片段/折叠原文、模型切换、上传入库和反馈保存 | 后续可复用 doctor 数据模型做初始化失败页 |
+| Web UI | Streamlit 页面已有流式刷新节流、友好错误、初始化失败 doctor 摘要、来源 view model、页码/分数/高亮片段/折叠原文、模型切换、上传入库和反馈保存 | 后续按反馈微调错误页展示密度 |
 | 评估体系 | 已有 benchmark、holdout、baseline runner、eval metrics 和 regression check | 质量门禁主线已具备，后续可接入更自动化的运行流程 |
 | 文档 | README、getting-started、FAQ、architecture 与本文档已覆盖上手、排障、架构和迁移历史 | 需要随包化收口持续刷新状态 |
 
@@ -24,7 +24,7 @@
 
 | 优先级 | 优化项 | 当前状态 | 下一步 |
 |---|---|---|---|
-| P0 | 启动诊断与配置资源检查 | 已完成 CLI 第一版与 `--json` | 后续接入 Streamlit 初始化失败页 |
+| P0 | 启动诊断与配置资源检查 | 已完成 CLI 第一版、`--json` 与 Streamlit 初始化失败页摘要 | 后续按真实排障反馈微调展示 |
 | P0 | 错误提示友好化 | 已覆盖 Streamlit 初始化和问答失败 | 后续 CLI/build 复用统一 formatter |
 | P0 | Streamlit 流式刷新节流 | 已完成 `TokenStreamBuffer` 与 UI 接入 | 保持参数轻量，按体验再调 |
 | P0 | FAQ 与快速开始补齐 | 已完成 `docs/getting-started.md` 与 `docs/FAQ.md` | 随真实问题增补 |
