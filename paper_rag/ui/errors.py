@@ -28,6 +28,47 @@ def format_runtime_error(error: Exception, settings: Mapping[str, Any] | None = 
     details = f"{type(error).__name__}: {error}"
     lowered = str(error).lower()
 
+    if "缺少必要配置项" in str(error) or "missing required config" in lowered:
+        return FriendlyError(
+            title="配置文件缺少必要项",
+            message="config.yaml 中缺少项目启动或入库必需的配置项。",
+            suggestions=[
+                "按 docs/getting-started.md 检查 config.yaml 是否完整。",
+                "确认 persist_directory、collection_name、embedding_model 和 llm_model 等关键项已配置。",
+                "运行 python main.py doctor 查看配置诊断详情。",
+            ],
+            details=details,
+            show_doctor_hint=True,
+        )
+
+    if (
+        isinstance(error, FileNotFoundError)
+        and any(signal in lowered for signal in ["papers", ".pdf", "pdf"])
+    ):
+        return FriendlyError(
+            title="论文文件不可用",
+            message="papers/ 中的论文 PDF 无法读取，入库流程无法继续。",
+            suggestions=[
+                "确认论文 PDF 已放入 papers/ 目录。",
+                "检查文件名、路径和读写权限是否正确。",
+                "运行 python main.py build 重新入库。",
+            ],
+            details=details,
+            show_doctor_hint=True,
+        )
+
+    if "pymupdf" in lowered or "fitz" in lowered:
+        return FriendlyError(
+            title="视觉入库依赖缺失",
+            message="视觉摘要入库需要 PyMuPDF 依赖，当前环境无法渲染 PDF 页面。",
+            suggestions=[
+                "安装 pymupdf 后重新运行 python main.py build。",
+                "如果暂时不需要视觉入库，可将 config.yaml 中的 enable_vision_analysis 设为 false。",
+            ],
+            details=details,
+            show_doctor_hint=False,
+        )
+
     if any(signal in lowered for signal in ["connection refused", "connect timeout", "read timed out", "ollama service"]):
         return FriendlyError(
             title="无法连接到 Ollama 服务",

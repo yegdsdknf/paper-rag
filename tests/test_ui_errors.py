@@ -36,6 +36,32 @@ class FriendlyErrorTest(unittest.TestCase):
         self.assertEqual(error.title, "向量库未构建或为空")
         self.assertIn("python main.py build", "\n".join(error.suggestions))
 
+    def test_formats_missing_config_error(self):
+        from paper_rag.ui.errors import format_runtime_error
+
+        error = format_runtime_error(ValueError("缺少必要配置项: persist_directory, collection_name"))
+
+        self.assertEqual(error.title, "配置文件缺少必要项")
+        self.assertIn("config.yaml", error.message)
+        self.assertIn("persist_directory", "\n".join(error.suggestions))
+
+    def test_formats_missing_paper_file_error(self):
+        from paper_rag.ui.errors import format_runtime_error
+
+        error = format_runtime_error(FileNotFoundError("No such file or directory: './papers/demo.pdf'"))
+
+        self.assertEqual(error.title, "论文文件不可用")
+        self.assertIn("papers/", error.message)
+        self.assertIn("python main.py build", "\n".join(error.suggestions))
+
+    def test_formats_missing_vision_dependency_error(self):
+        from paper_rag.ui.errors import format_runtime_error
+
+        error = format_runtime_error(RuntimeError("PyMuPDF 未安装，请安装 pymupdf 后启用视觉入库。"))
+
+        self.assertEqual(error.title, "视觉入库依赖缺失")
+        self.assertIn("enable_vision_analysis", "\n".join(error.suggestions))
+
     def test_formats_reranker_unavailable_as_warning(self):
         from paper_rag.ui.errors import format_runtime_error
 
