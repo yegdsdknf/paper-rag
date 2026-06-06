@@ -1,5 +1,7 @@
 """兼容薄壳：新代码请从 paper_rag.retrieval.router 导入。"""
 
+__compat_replacement__ = "paper_rag.retrieval.router"
+
 from paper_rag.retrieval.router import (
     RetrievalRouter,
     deduplicate_docs,

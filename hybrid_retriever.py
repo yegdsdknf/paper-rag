@@ -1,5 +1,7 @@
 """兼容薄壳：新代码请从 paper_rag.retrieval.hybrid 导入。"""
 
+__compat_replacement__ = "paper_rag.retrieval.hybrid"
+
 from paper_rag.config import RagSettings
 from paper_rag.indexing.manifest import load_index_manifest as _load_index_manifest
 from paper_rag.retrieval.hybrid import (

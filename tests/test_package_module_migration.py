@@ -82,27 +82,32 @@ class PackageModuleMigrationTest(unittest.TestCase):
     def test_root_compat_wrappers_document_package_replacement(self):
         import importlib
 
-        wrappers = [
-            "context_builder",
-            "context_compression",
-            "app_state",
-            "app_services",
-            "feedback",
-            "generation_service",
-            "hybrid_retriever",
-            "parent_retrieval",
-            "query_expansion",
-            "query_logger",
-            "reranker",
-            "retrieval_router",
-            "source_utils",
-        ]
+        wrappers = {
+            "app_services": "paper_rag.ui.services",
+            "app_state": "paper_rag.ui.state",
+            "context_builder": "paper_rag.generation.context",
+            "context_compression": "paper_rag.generation.context_compression",
+            "feedback": "paper_rag.observability.feedback",
+            "generation_service": "paper_rag.generation.service",
+            "hybrid_retriever": "paper_rag.retrieval.hybrid",
+            "parent_retrieval": "paper_rag.generation.parent_retrieval",
+            "query_expansion": "paper_rag.retrieval.query_expansion",
+            "query_logger": "paper_rag.observability.query_logger",
+            "reranker": "paper_rag.retrieval.reranker",
+            "retrieval_router": "paper_rag.retrieval.router",
+            "source_utils": "paper_rag.observability.sources",
+        }
 
-        for module_name in wrappers:
+        for module_name, replacement in wrappers.items():
             module = importlib.import_module(module_name)
             doc = module.__doc__ or ""
             self.assertIn("兼容薄壳", doc, f"{module_name} should document its compatibility role")
             self.assertIn("paper_rag.", doc, f"{module_name} should point callers to package imports")
+            self.assertEqual(
+                getattr(module, "__compat_replacement__", None),
+                replacement,
+                f"{module_name} should expose its package replacement",
+            )
 
     def test_rag_pipeline_single_turn_entries_keep_patch_compatibility(self):
         import rag_pipeline

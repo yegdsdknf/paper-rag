@@ -571,6 +571,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | 根目录兼容薄壳新增模块级 deprecation 指引，测试保护旧 import 仍可用且指向 `paper_rag.*` 新路径 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 | 已完成 | 新增 `paper_rag.ui.state`，将 `app_state.py` 降级为兼容薄壳；`paper_rag.ui.__init__` 与 `paper_rag.ui.services` 不再反向依赖根目录 `app_state.py` / `feedback.py` | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration tests.test_app_state tests.test_app_services tests.test_package_imports` |
 | 已完成 | `app.py` 与 `benchmarks/run_baseline.py` 改用 `paper_rag.ui` / `paper_rag.observability.sources` 包内路径，真实代码中的根兼容薄壳 import 扫描为空 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
+| 已完成 | 所有根目录兼容薄壳新增 `__compat_replacement__` 元数据，测试可直接校验旧入口对应的新包路径 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 
 **建议阶段**
 
