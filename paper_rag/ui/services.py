@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from feedback import build_feedback_record, save_feedback_record
+from paper_rag.observability.feedback import build_feedback_record, save_feedback_record
 
 
 @dataclass

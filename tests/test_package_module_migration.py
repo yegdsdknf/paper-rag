@@ -6,10 +6,12 @@ class PackageModuleMigrationTest(unittest.TestCase):
     def test_low_coupling_implementations_live_under_package_modules(self):
         from paper_rag.generation.service import build_rag_prompt
         from paper_rag.observability.sources import source_from_doc
+        from paper_rag.ui.state import clear_conversation_state
         from paper_rag.ui.services import build_feedback_payload
 
         self.assertTrue(callable(build_rag_prompt))
         self.assertTrue(callable(source_from_doc))
+        self.assertTrue(callable(clear_conversation_state))
         self.assertTrue(callable(build_feedback_payload))
 
     def test_medium_coupling_implementations_live_under_package_modules(self):
@@ -53,10 +55,14 @@ class PackageModuleMigrationTest(unittest.TestCase):
         package_files = [
             Path("paper_rag/generation/context.py"),
             Path("paper_rag/retrieval/router.py"),
+            Path("paper_rag/ui/__init__.py"),
+            Path("paper_rag/ui/services.py"),
             Path("rag_pipeline.py"),
             Path("build_knowledge.py"),
         ]
         forbidden = [
+            "from app_state import",
+            "from feedback import",
             "from context_compression import",
             "from hybrid_retriever import",
             "from parent_retrieval import",
@@ -75,6 +81,7 @@ class PackageModuleMigrationTest(unittest.TestCase):
         wrappers = [
             "context_builder",
             "context_compression",
+            "app_state",
             "app_services",
             "feedback",
             "generation_service",

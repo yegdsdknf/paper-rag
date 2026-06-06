@@ -6,7 +6,7 @@ from paper_rag.ui.services import (
     save_uploaded_pdfs,
 )
 from paper_rag.ui.errors import FriendlyError, format_runtime_error, render_streamlit_error
-from app_state import clear_conversation_state
+from paper_rag.ui.state import clear_conversation_state
 from paper_rag.ui.sources import SourceViewModel, build_source_view_models
 from paper_rag.ui.streaming import TokenStreamBuffer
 

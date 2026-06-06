@@ -1,11 +1,5 @@
-from __future__ import annotations
+"""兼容薄壳：新代码请从 paper_rag.ui.state 导入。"""
 
-from collections.abc import MutableMapping
+from paper_rag.ui.state import clear_conversation_state
 
-
-def clear_conversation_state(state: MutableMapping) -> None:
-    """清空一次对话相关状态，保留模型选择和数据库版本等全局设置。"""
-    state["messages"] = []
-    state["conversation"] = None
-    state["last_feedback_payload"] = None
-    state.pop("feedback_note", None)
+__all__ = ["clear_conversation_state"]
