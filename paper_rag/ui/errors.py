@@ -123,6 +123,27 @@ def render_streamlit_error(st_module: Any, friendly_error: FriendlyError) -> Non
             st_module.markdown(f"`{friendly_error.details}`")
 
 
+def render_cli_error_text(error: Exception, settings: Mapping[str, Any] | None = None) -> str:
+    """将运行时错误格式化为 CLI/build 可读文本。"""
+    friendly_error = format_runtime_error(error, settings)
+    lines = [
+        f"❌ {friendly_error.title}",
+        "",
+        friendly_error.message,
+    ]
+    if friendly_error.suggestions:
+        lines.append("")
+        lines.append("建议下一步：")
+        for suggestion in friendly_error.suggestions:
+            lines.append(f"- {suggestion}")
+    if friendly_error.show_doctor_hint and not any("python main.py doctor" in item for item in friendly_error.suggestions):
+        lines.append("- 运行 python main.py doctor 查看完整环境诊断。")
+    if friendly_error.details:
+        lines.append("")
+        lines.append(f"技术详情：{friendly_error.details}")
+    return "\n".join(lines)
+
+
 def render_streamlit_diagnostics(st_module: Any, report: Any) -> None:
     """在 Streamlit 初始化失败页展示 doctor 诊断报告摘要。"""
     st_module.markdown("**Doctor 诊断摘要：**")

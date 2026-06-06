@@ -24,8 +24,14 @@ def main():
 
     if command == "build":
         print("🏗️  启动论文入库...\n")
-        import build_knowledge
-        build_knowledge.main(sys.argv[2:])
+        try:
+            import build_knowledge
+            build_knowledge.main(sys.argv[2:])
+        except Exception as exc:
+            from paper_rag.ui.errors import render_cli_error_text
+
+            print(render_cli_error_text(exc), file=sys.stderr)
+            return 1
     elif command == "query":
         print("📚 启动问答系统...\n")
         import query
