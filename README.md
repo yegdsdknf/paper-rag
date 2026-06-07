@@ -17,16 +17,16 @@
 | `app.py` / `app_services.py` / `app_state.py` | Streamlit Web 入口、UI service 和会话状态工具。 |
 | `main.py` / `query.py` | CLI 入口和交互式问答。 |
 | `build_knowledge.py` | PDF 入库与向量库构建入口。 |
-| `rag_pipeline.py` | 当前 RAG 主编排入口，后续会逐步拆分为更小模块。 |
-| `hybrid_retriever.py` / `retrieval_router.py` | 混合检索实现和检索路线选择。 |
-| `generation_service.py` / `context_builder.py` | 答案生成、prompt 构造、流式 token 输出和生成阶段上下文构建。 |
-| `context_compression.py` / `parent_retrieval.py` | 上下文压缩和 parent 回溯。 |
-| `query_logger.py` / `feedback.py` / `source_utils.py` | 结构化日志、失败样本回流和来源序列化。 |
+| `rag_pipeline.py` | RAG 旧公开入口；当前主要作为兼容 facade，真实编排已迁入 `paper_rag.pipeline`。 |
+| `hybrid_retriever.py` / `retrieval_router.py` | 根目录兼容薄壳；推荐新代码使用 `paper_rag.retrieval.*`。 |
+| `generation_service.py` / `context_builder.py` | 根目录兼容薄壳；推荐新代码使用 `paper_rag.generation.*`。 |
+| `context_compression.py` / `parent_retrieval.py` | 根目录兼容薄壳；推荐新代码使用 `paper_rag.generation.*`。 |
+| `query_logger.py` / `feedback.py` / `source_utils.py` | 根目录兼容薄壳；推荐新代码使用 `paper_rag.observability.*`。 |
 | `benchmarks/` | 人工标注基准集和 baseline 脚本。 |
 | `eval/` | 离线评估脚本和指标。 |
 | `tests/` | 单元测试与集成边界测试。 |
 | `prompts/` | RAG 和 HyDE prompt 模板。 |
-| `paper_rag/` | 渐进包化 facade，当前 re-export 根目录稳定模块。 |
+| `paper_rag/` | 当前主要实现包，承载 config、runtime、pipeline、retrieval、generation、observability 和 ui。 |
 
 ## 环境准备
 
@@ -84,9 +84,9 @@ Get-Content logs\query_runs.jsonl -Tail 1 | ConvertFrom-Json | ConvertTo-Json -D
 
 ## 工程化重构路线
 
-当前阶段保留根目录入口，优先通过小步重构建立模块边界。后续目标是逐步迁移到 `paper_rag/` 包结构，并让 `rag_pipeline.py` 退化为兼容 facade。
+当前阶段保留根目录入口，但新代码优先从 `paper_rag.*` 导入。根目录同名模块已降级为兼容薄壳，主要服务旧 import、测试 patch 和潜在外部调用；真实代码不应重新依赖这些薄壳。
 
-目前 `paper_rag/` 已提供兼容 facade，例如：
+推荐 import 示例：
 
 ```python
 from paper_rag.retrieval import RetrievalRouter
@@ -96,7 +96,16 @@ from paper_rag.config import RagSettings, get_setting
 from paper_rag.ui import build_feedback_payload
 ```
 
-第一批低耦合实现已迁入包内：
+当前兼容薄壳策略集中记录在 `paper_rag.compat`：
+
+| Registry | 用途 |
+|---|---|
+| `COMPAT_WRAPPER_REPLACEMENTS` | 记录根目录兼容薄壳对应的新包路径。 |
+| `COMPAT_WRAPPER_RETIREMENT_POLICY` | 记录当前退场阶段、允许的内部使用范围和下一步外部调用确认动作。 |
+
+当前策略是 `keep_compat_wrapper`：暂不删除根目录薄壳，也不建议一次性批量退场。如果后续确认外部调用已经迁移，再按单个模块调整为 warning 或移除，并同步 README、FAQ 和迁移测试。
+
+主要包内实现与根目录兼容入口：
 
 | 包内模块 | 根目录兼容薄壳 |
 |---|---|
@@ -108,8 +117,13 @@ from paper_rag.ui import build_feedback_payload
 | `paper_rag.observability.trace` | `rag_pipeline.py` 阶段耗时统计 |
 | `paper_rag.generation.service` | `generation_service.py` |
 | `paper_rag.generation.context` | `context_builder.py` |
+| `paper_rag.generation.context_compression` | `context_compression.py` |
 | `paper_rag.generation.parent_retrieval` | `parent_retrieval.py` |
+| `paper_rag.retrieval.hybrid` | `hybrid_retriever.py` |
+| `paper_rag.retrieval.query_expansion` | `query_expansion.py` |
+| `paper_rag.retrieval.reranker` | `reranker.py` |
 | `paper_rag.retrieval.router` | `retrieval_router.py` |
 | `paper_rag.ui.services` | `app_services.py` |
+| `paper_rag.ui.state` | `app_state.py` |
 
 详见 [docs/architecture.md](docs/architecture.md)。

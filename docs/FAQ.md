@@ -175,3 +175,20 @@ streamlit run app.py
 ```
 
 如果 Web UI 已经打开，可以使用侧边栏上传 PDF 并点击“一键入库”。入库完成后，页面会刷新检索器。
+
+---
+
+## 9. 旧的根目录 import 还能继续用吗？
+
+可以继续用，但新代码推荐改成 `paper_rag.*` 包路径。
+
+当前根目录中的 `generation_service.py`、`hybrid_retriever.py`、`query_expansion.py`、`reranker.py`、`context_builder.py`、`app_services.py` 等文件主要是兼容薄壳，用于保护旧 import、测试 patch 和潜在外部调用。真实实现已迁入 `paper_rag.generation`、`paper_rag.retrieval`、`paper_rag.observability`、`paper_rag.ui` 等包内模块。
+
+| 场景 | 建议 |
+|---|---|
+| 新增代码 | 优先使用 `paper_rag.*` 包路径 |
+| 旧脚本还在 `from hybrid_retriever import HybridRetriever` | 暂时可继续运行 |
+| 想确认替代路径 | 查看 `paper_rag.compat.COMPAT_WRAPPER_REPLACEMENTS` |
+| 担心薄壳被删除 | 当前策略是 `keep_compat_wrapper`，不会一次性删除 |
+
+如果后续需要退场某个兼容薄壳，会先调整 `paper_rag.compat.COMPAT_WRAPPER_RETIREMENT_POLICY`，再同步 README、FAQ 和迁移测试。
