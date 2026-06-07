@@ -2,7 +2,7 @@
 
 > 本文档基于当前代码状态重新整理，重点区分“已有基础”和“真实缺口”，并给出可执行的优先级、风险和验收方式。
 >
-> 状态更新时间：2026-06-05
+> 状态更新时间：2026-06-07
 
 ---
 
@@ -686,18 +686,18 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 
 ---
 
-## 九、推荐先实施的最小闭环
+## 九、包化收口闭环状态
 
-当前主线优化已基本完成。如果只继续一个最小闭环，建议聚焦包化收口：
+当前主线优化已基本完成，包化收口最小闭环也已落地：
 
-| 顺序 | 任务 | 为什么 |
+| 顺序 | 任务 | 当前状态 |
 |---|---|---|
-| 1 | 建立旧根入口 import 清单，区分项目内部、测试和潜在外部调用 | 退场前先知道谁还依赖旧路径 |
-| 2 | 对内部调用优先改成 `paper_rag.*` 包路径，保留测试中必要的 patch 兼容覆盖 | 让真实代码不再依赖薄壳 |
-| 3 | 将根目录薄壳退场写成明确策略：保留、警告、或删除 | 防止一次性删除造成非必要破坏 |
-| 4 | 回跑 package migration、query logger、app services 和完整测试 | 覆盖旧 import、日志字段、事件顺序和兼容 facade |
+| 1 | 建立旧根入口 import 清单，区分项目内部、测试和潜在外部调用 | 已由 `paper_rag.compat` registry、非测试代码扫描和 wrapper replacement 元数据承载 |
+| 2 | 对内部调用优先改成 `paper_rag.*` 包路径，保留测试中必要的 patch 兼容覆盖 | 已完成；真实代码不再依赖根目录兼容薄壳，测试继续保护旧 import 和 patch 语义 |
+| 3 | 将根目录薄壳退场写成明确策略：保留、警告、或删除 | 已完成；当前策略为 `keep_compat_wrapper`，下一步是基于外部调用反馈决定 warning 或移除 |
+| 4 | 回跑 package migration、query logger、app services、完整测试和 benchmark | 已完成；阶段性门禁包含完整 unittest 与 `benchmarks/run_baseline.py --no-generate` |
 
-这个闭环完成后，`rag_pipeline.py` 将更接近纯 facade；根目录薄壳是否退场就可以基于真实 import 清单单独决策。
+后续不建议一次性删除根目录薄壳。更稳妥的路线是继续保留兼容入口，观察外部调用反馈；如果需要退场，先在 registry 中调整单个模块策略，再同步 README、FAQ 和迁移测试。
 
 ---
 
