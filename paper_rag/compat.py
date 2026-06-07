@@ -23,4 +23,23 @@ COMPAT_WRAPPER_REPLACEMENTS = MappingProxyType(
     }
 )
 
-__all__ = ["COMPAT_WRAPPER_REPLACEMENTS"]
+
+def _build_retirement_policy() -> MappingProxyType:
+    return MappingProxyType(
+        {
+            module_name: MappingProxyType(
+                {
+                    "replacement": replacement,
+                    "stage": "keep_compat_wrapper",
+                    "allowed_internal_imports": ("tests",),
+                    "next_action": "audit external imports before warning or removal",
+                }
+            )
+            for module_name, replacement in COMPAT_WRAPPER_REPLACEMENTS.items()
+        }
+    )
+
+
+COMPAT_WRAPPER_RETIREMENT_POLICY = _build_retirement_policy()
+
+__all__ = ["COMPAT_WRAPPER_REPLACEMENTS", "COMPAT_WRAPPER_RETIREMENT_POLICY"]

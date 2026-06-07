@@ -95,6 +95,54 @@ class PackageModuleMigrationTest(unittest.TestCase):
                 f"{module_name} should expose its package replacement",
             )
 
+    def test_compat_wrappers_have_explicit_retirement_policy(self):
+        from paper_rag.compat import COMPAT_WRAPPER_REPLACEMENTS, COMPAT_WRAPPER_RETIREMENT_POLICY
+
+        self.assertEqual(set(COMPAT_WRAPPER_RETIREMENT_POLICY), set(COMPAT_WRAPPER_REPLACEMENTS))
+        for module_name, replacement in COMPAT_WRAPPER_REPLACEMENTS.items():
+            policy = COMPAT_WRAPPER_RETIREMENT_POLICY[module_name]
+            self.assertEqual(policy["replacement"], replacement)
+            self.assertEqual(policy["stage"], "keep_compat_wrapper")
+            self.assertIn("tests", policy["allowed_internal_imports"])
+            self.assertIn("external", policy["next_action"])
+
+    def test_non_test_code_does_not_import_root_compat_wrappers(self):
+        from pathlib import Path
+
+        from paper_rag.compat import COMPAT_WRAPPER_REPLACEMENTS
+
+        skipped_roots = {
+            ".git",
+            ".lark-cli",
+            ".venv",
+            ".worktrees",
+            "__pycache__",
+            "chroma_db_experiments",
+            "logs",
+            "tests",
+        }
+        wrapper_files = {Path(f"{module_name}.py") for module_name in COMPAT_WRAPPER_REPLACEMENTS}
+        forbidden_patterns = [
+            f"from {module_name} import"
+            for module_name in COMPAT_WRAPPER_REPLACEMENTS
+        ] + [
+            f"import {module_name}"
+            for module_name in COMPAT_WRAPPER_REPLACEMENTS
+        ]
+
+        offenders = []
+        for path in Path(".").rglob("*.py"):
+            if any(part in skipped_roots for part in path.parts):
+                continue
+            if path in wrapper_files:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for pattern in forbidden_patterns:
+                if pattern in text:
+                    offenders.append(f"{path}: {pattern}")
+
+        self.assertEqual(offenders, [])
+
     def test_rag_pipeline_single_turn_entries_keep_patch_compatibility(self):
         import rag_pipeline
 

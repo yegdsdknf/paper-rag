@@ -10,7 +10,7 @@
 
 | 维度 | 当前状态 | 判断 |
 |---|---|---|
-| 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config、runtime、pipeline 等主要实现；根目录同类模块已降级为兼容薄壳，并补充 deprecation 指引与测试保护 | 已进入兼容壳退场策略阶段 |
+| 包化迁移 | `paper_rag/` 已承载 generation、retrieval、observability、ui、config、runtime、pipeline 等主要实现；根目录同类模块已降级为兼容薄壳，并补充 deprecation 指引、退场策略 registry 与测试保护 | 已进入外部调用确认阶段 |
 | 主链路编排 | `rag_pipeline.py` 仍是旧公开入口；运行时、检索、生成、日志、单轮兼容入口、非流式多轮入口和流式入口编排已迁入包内，根文件主要负责旧签名、patch 兼容和依赖注入 | 已接近纯 facade，后续重点是兼容壳退场策略 |
 | 配置管理 | `RagSettings.from_mapping()`、`main.py doctor --json`、启动诊断数据模型、formatter、Streamlit 初始化失败页诊断摘要、build CLI 友好错误和常见失败样本匹配已落地 | 后续按真实排障反馈微调文案 |
 | 检索能力 | 已具备混合检索、BM25 持久化、动态权重、HyDE、Query Expansion 质量过滤、Rerank 阈值、Parent Retrieval、Context Compression 和语义原型缓存 | 主线优化基本完成，后续重点是校准和体验 |
@@ -35,7 +35,7 @@
 | P2 | Query Expansion 质量过滤 | 已完成，默认关闭 | 用真实问题评估开启收益 |
 | P2 | Context Compression 打分改进 | 已完成 | 继续观察关键证据误删风险 |
 | P3 | Embedding 原型预计算 | 已完成缓存第一版 | 按冷启动数据评估收益 |
-| P3 | 包化迁移最终收口 | 进行中，兼容薄壳已加注释和测试保护 | 确认外部调用后再退场薄壳 |
+| P3 | 包化迁移最终收口 | 进行中，兼容薄壳已加注释、测试保护、集中 registry 和退场策略 | 确认外部调用后再决定 warning 或移除 |
 | P3 | `rag_pipeline.py` 继续瘦身 | 已完成主要编排迁移，单轮、非流式多轮和流式入口均已迁入 service | 后续只保留兼容 facade 并评估旧入口退场 |
 
 ---
@@ -558,8 +558,8 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 类型 | 示例 | 建议 |
 |---|---|---|
 | 真实入口 | `app.py`、`main.py`、`query.py`、`build_knowledge.py`、`rag_pipeline.py` | 暂时保留 |
-| 兼容薄壳 | `app_state.py`、`app_services.py`、`feedback.py`、`generation_service.py`、`context_builder.py`、`retrieval_router.py`、`source_utils.py`、`query_expansion.py`、`reranker.py`、`context_compression.py`、`parent_retrieval.py`、`hybrid_retriever.py`、`query_logger.py` | 已补模块级兼容说明和测试保护；分阶段退场 |
-| 仍有真实实现 | `rag_pipeline.py` 主要保留旧公开入口、patch 兼容和依赖注入 | 下一步评估旧入口退场和外部 import 清单 |
+| 兼容薄壳 | `app_state.py`、`app_services.py`、`feedback.py`、`generation_service.py`、`context_builder.py`、`retrieval_router.py`、`source_utils.py`、`query_expansion.py`、`reranker.py`、`context_compression.py`、`parent_retrieval.py`、`hybrid_retriever.py`、`query_logger.py` | 已补模块级兼容说明、集中 registry、退场策略和测试保护；当前阶段保留 |
+| 仍有真实实现 | `rag_pipeline.py` 主要保留旧公开入口、patch 兼容和依赖注入 | 下一步只评估旧入口 warning 时机和外部调用反馈 |
 
 **已完成进展**
 
@@ -573,6 +573,8 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 已完成 | `app.py` 与 `benchmarks/run_baseline.py` 改用 `paper_rag.ui` / `paper_rag.observability.sources` 包内路径，真实代码中的根兼容薄壳 import 扫描为空 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 | 已完成 | 所有根目录兼容薄壳新增 `__compat_replacement__` 元数据，测试可直接校验旧入口对应的新包路径 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 | 已完成 | 新增 `paper_rag.compat.COMPAT_WRAPPER_REPLACEMENTS`，将兼容薄壳到新包路径的映射集中为可复用 registry | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
+| 已完成 | 新增 `paper_rag.compat.COMPAT_WRAPPER_RETIREMENT_POLICY`，固化每个兼容薄壳的替代路径、当前阶段、允许内部 import 范围和下一步外部调用确认动作 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
+| 已完成 | 测试扫描非测试代码，防止项目真实代码重新依赖根目录兼容薄壳；旧路径仅保留给测试和潜在外部调用兼容 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 
 **建议阶段**
 
@@ -581,7 +583,8 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 | 1 | 全局替换内部 import 为 `paper_rag.*` | 已覆盖 generation context、retrieval router 和 `rag_pipeline.py` 的核心辅助导入 |
 | 2 | 对薄壳增加 deprecation 注释或测试保护 | 已完成；旧入口仍可用，并新增单测保护兼容说明 |
 | 3 | 将剩余真实实现迁入 `paper_rag.retrieval`、`paper_rag.generation` | 已迁入 `hybrid_retriever`、`query_expansion`、`reranker`、`context_compression` |
-| 4 | 在确认无外部调用后删除薄壳 | README 和 docs 同步更新 |
+| 4 | 建立兼容薄壳退场 registry 与非测试代码扫描保护 | 已完成；当前策略为 `keep_compat_wrapper` |
+| 5 | 在确认无外部调用后决定 warning 或删除薄壳 | README 和 docs 同步更新 |
 
 **风险**
 
@@ -663,7 +666,7 @@ score = term_score * coverage_bonus * length_factor + position_bonus
 
 | 顺序 | 当前剩余任务 | 验收命令 |
 |---|---|---|
-| 1 | 梳理根目录旧入口和兼容薄壳的真实调用清单，决定退场顺序 | `rg "from (rag_pipeline|generation_service|retrieval_router|query_expansion|reranker|context_compression|hybrid_retriever)" .` |
+| 1 | 梳理根目录旧入口和兼容薄壳的真实调用清单，决定退场顺序 | 已由 `paper_rag.compat` registry 和非测试代码扫描保护承载 |
 | 2 | 持续保护根目录兼容薄壳，确认旧 import 与 patch 兼容语义不被破坏 | `.\.venv\Scripts\python.exe -m unittest tests.test_package_module_migration` |
 | 3 | 将 Streamlit 初始化失败页复用 doctor 数据模型 | `.\.venv\Scripts\python.exe -m unittest tests.test_config_diagnostics tests.test_ui_errors` |
 | 4 | 按新增真实失败样本微调 CLI/UI 友好错误匹配规则 | `.\.venv\Scripts\python.exe -m unittest tests.test_main_cli tests.test_ui_errors` |
